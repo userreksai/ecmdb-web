@@ -1,0 +1,116 @@
+import instance from "@@/utils/service"
+import type * as resource from "./types/resource"
+import { RGJsonData } from "relation-graph-vue3"
+import { API_SERVICE } from "@@/utils/service"
+
+/** 获取模型下所有资源 */
+export function listResourceApi(data: resource.ListResourceReq) {
+  return instance.post<resource.ResourceData>({
+    url: `${API_SERVICE.CMDB}/resource/list`,
+    data: data
+  })
+}
+
+/** 在指定模型内按任意字段搜索资源，精确匹配优先 */
+export function searchModelResourceApi(data: resource.SearchModelResourceReq) {
+  return instance.post<resource.ResourceData>({
+    url: `${API_SERVICE.CMDB}/resource/list/search`,
+    data: data
+  })
+}
+
+/** 新增资源 */
+export function createResourceApi(data: resource.CreateOrUpdateResourceReq) {
+  return instance.post<number>({
+    url: `${API_SERVICE.CMDB}/resource/create`,
+    data: data
+  })
+}
+
+/** 修改资源 */
+export function updateResourceApi(data: resource.CreateOrUpdateResourceReq) {
+  return instance.post<number>({
+    url: `${API_SERVICE.CMDB}/resource/update`,
+    data: data
+  })
+}
+
+/** 变更自定义字段数据 */
+export function setCustomFieldApi(data: resource.setCustomFieldReq) {
+  return instance.post<number>({
+    url: `${API_SERVICE.CMDB}/resource/set_custom_field`,
+    data: data
+  })
+}
+
+/** 资源详情 */
+export function detailResourceApi(data: resource.detailResource) {
+  return instance.post<resource.Resource>({
+    url: `${API_SERVICE.CMDB}/resource/detail`,
+    data: data
+  })
+}
+
+/** 删除资源 */
+export function deleteResourceApi(id: number) {
+  return instance.post<number>({
+    url: `${API_SERVICE.CMDB}/resource/delete`,
+    data: { id: id }
+  })
+}
+
+/** 获取可关联的数据, 增加过滤条件 */
+export function canBeRelatedFilterResourceApi(data: resource.canBeRelationFilterReq) {
+  return instance.post<resource.ResourceData>({
+    url: `${API_SERVICE.CMDB}/resource/relation/can_be_related`,
+    data: data
+  })
+}
+
+/** 根据ids获取资源 */
+export function listResourceByIdsApi(modelUid: string, resourceIds: number[]) {
+  return instance.post<resource.ResourceData>({
+    url: `${API_SERVICE.CMDB}/resource/list/ids`,
+    data: { model_uid: modelUid, resource_ids: resourceIds }
+  })
+}
+
+/** 查询拓扑图 */
+export function findGraphApi(data: resource.findGraphReq) {
+  return instance.post<RGJsonData>({
+    url: `${API_SERVICE.CMDB}/resource/relation/graph`,
+    data: data
+  })
+}
+
+/** 拓扑图 Left 方向扩展 */
+export function findLeftGraphApi(data: resource.findGraphReq) {
+  return instance.post<RGJsonData>({
+    url: `${API_SERVICE.CMDB}/resource/relation/graph/add/left`,
+    data: data
+  })
+}
+
+/** 拓扑图 Right 方向扩展 */
+export function findRightGraphApi(data: resource.findGraphReq) {
+  return instance.post<RGJsonData>({
+    url: `${API_SERVICE.CMDB}/resource/relation/graph/add/right`,
+    data: data
+  })
+}
+
+/** 全局检索 */
+export function globalSearchApi(text: string) {
+  return instance.post<resource.globalSearchData[]>({
+    url: `${API_SERVICE.CMDB}/resource/search`,
+    data: { text: text }
+  })
+}
+
+/** 查看加密数据字段 */
+export function findSecureData(data: resource.findSecureReq) {
+  return instance.post<string>({
+    url: `${API_SERVICE.CMDB}/resource/secure`,
+    data: data
+  })
+}

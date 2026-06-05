@@ -8,7 +8,7 @@
       :show-add-button="false"
       :show-refresh-button="false"
       @add="handlerCreate"
-      @refresh="listAttributeFields"
+      @refresh="handleRefreshResources"
       @back="goBack"
     >
       <template #details>
@@ -25,25 +25,41 @@
 
       <!-- 自定义操作按钮 -->
       <template #actions>
-        <el-button :icon="Download" :loading="exporting" class="action-btn" @click="handleExportTemplate">
-          导出模板
-        </el-button>
-        <el-button type="success" :icon="Upload" class="action-btn" @click="handleShowImportDialog">
-          导入数据
-        </el-button>
-        <el-button type="warning" :icon="Download" class="action-btn" @click="handleShowExportDialog">
-          导出数据
-        </el-button>
+        <div class="header-actions-bar">
+          <el-input
+            v-model="searchKeyword"
+            clearable
+            class="resource-search"
+            placeholder="搜索当前模型"
+            :prefix-icon="Search"
+            @keyup.enter="handleSearch"
+            @clear="handleSearch"
+          />
+          <el-button type="primary" :icon="Search" :loading="loading" class="action-btn" @click="handleSearch">
+            查询
+          </el-button>
 
-        <el-divider direction="vertical" />
+          <el-button :icon="Download" :loading="exporting" class="action-btn" @click="handleExportTemplate">
+            导出模板
+          </el-button>
+          <el-button type="success" :icon="Upload" class="action-btn" @click="handleShowImportDialog">
+            导入数据
+          </el-button>
+          <el-button type="warning" :icon="Download" class="action-btn" @click="handleShowExportDialog">
+            导出数据
+          </el-button>
 
-        <el-button type="primary" :icon="CirclePlus" class="action-btn" @click="handlerCreate">新增资源</el-button>
-        <el-button type="primary" :icon="View" class="action-btn" @click="handleShowDisplayList">展示列表</el-button>
-        <el-button type="primary" :icon="RefreshRight" circle class="refresh-btn" @click="listAttributeFields" />
+          <el-divider direction="vertical" />
+
+          <el-button type="primary" :icon="CirclePlus" class="action-btn" @click="handlerCreate">新增资源</el-button>
+          <el-button type="primary" :icon="View" class="action-btn" @click="handleShowDisplayList">展示列表</el-button>
+          <el-button type="primary" :icon="RefreshRight" circle class="refresh-btn" @click="handleRefreshResources" />
+        </div>
       </template>
     </ManagerHeader>
 
     <DataTable
+      v-loading="loading"
       :data="resourcesData"
       :columns="tableColumns"
       :show-selection="true"
@@ -155,9 +171,9 @@ import { onMounted, onUnmounted, ref, watch, h, nextTick, computed, markRaw } fr
 import { useRoute } from "vue-router"
 import { type Attribute } from "@/api/attribute/types/attribute"
 import { getModelAttributesWithGroupsApi } from "@/api/attribute"
-import { listResourceApi, deleteResourceApi, findSecureData } from "@/api/resource"
+import { listResourceApi, searchModelResourceApi, deleteResourceApi, findSecureData } from "@/api/resource"
 import { type Resource } from "@/api/resource/types/resource"
-import { CirclePlus, Edit, Delete, View, Setting, Download, Upload, RefreshRight } from "@element-plus/icons-vue"
+import { CirclePlus, Edit, Delete, View, Setting, Download, Upload, RefreshRight, Search } from "@element-plus/icons-vue"
 import { usePagination } from "@/common/composables/usePagination"
 import ManagerHeader from "@@/components/ManagerHeader/index.vue"
 import DataTable from "@@/components/DataTable/index.vue"
@@ -182,6 +198,8 @@ const attributeFiledsData = ref<Attribute[]>([])
 const attributeGroupsData = ref<any[]>([]) // 存储分组数据
 const displayFileds = ref<Attribute[]>([])
 const drawerVisible = ref<boolean>(false)
+const loading = ref(false)
+const searchKeyword = ref("")
 
 const title = ref<string>("")
 
@@ -208,6 +226,11 @@ const handleShowExportDialog = () => {
 
 const handleShowDisplayList = () => {
   displayListVisible.value = true
+}
+
+const handleRefreshResources = () => {
+  listAttributeFields()
+  listResourceByModelUid()
 }
 
 // 导入成功后刷新列表
@@ -348,27 +371,42 @@ const openNewPage = (url: string) => {
 
 // ** 获取资产列表 */
 const resourcesData = ref<Resource[]>([])
-const listResourceByModelUid = () => {
+const listResourceByModelUid = async () => {
   if (!modelUid.value) {
     resourcesData.value = []
     paginationData.total = 0
     return
   }
 
-  listResourceApi({
+  loading.value = true
+  const params = {
     model_uid: modelUid.value,
     offset: (paginationData.currentPage - 1) * paginationData.pageSize,
     limit: paginationData.pageSize
-  })
-    .then(({ data }) => {
-      resourcesData.value = data.resources || []
-      paginationData.total = data.total || 0
-    })
-    .catch(() => {
-      resourcesData.value = []
-      paginationData.total = 0
-    })
-    .finally(() => {})
+  }
+  const keyword = searchKeyword.value.trim()
+
+  try {
+    const { data } = keyword ? await searchModelResourceApi({ ...params, keyword }) : await listResourceApi(params)
+    resourcesData.value = data.resources || []
+    paginationData.total = data.total || 0
+  } catch (error) {
+    resourcesData.value = []
+    paginationData.total = 0
+    ElMessage.error(keyword ? "搜索资源失败" : "获取资源列表失败")
+    console.error("fetch resources failed:", error)
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleSearch = () => {
+  selectedResources.value = []
+  if (paginationData.currentPage === 1) {
+    listResourceByModelUid()
+  } else {
+    paginationData.currentPage = 1
+  }
 }
 
 const handleDelete = (row: Resource) => {
@@ -472,6 +510,7 @@ watch(
   () => {
     selectedResources.value = []
     resourcesData.value = []
+    searchKeyword.value = ""
     if (paginationData.currentPage === 1) {
       listResourceByModelUid()
     } else {
@@ -547,6 +586,22 @@ watch(
     justify-content: flex-end;
     min-width: 360px;
   }
+
+  .header-actions-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .resource-search {
+    width: 260px;
+  }
+
+  :deep(.el-divider--vertical) {
+    margin: 0 2px;
+  }
 }
 
 @media (max-width: 1200px) {
@@ -559,6 +614,14 @@ watch(
     :deep(.header-right) {
       justify-content: flex-start;
       min-width: 0;
+    }
+
+    .header-actions-bar {
+      justify-content: flex-start;
+    }
+
+    .resource-search {
+      width: min(100%, 320px);
     }
   }
 }

@@ -133,33 +133,64 @@
                 <el-icon><View /></el-icon>
                 详情
               </el-button>
+              <el-button type="warning" text size="small" @click="handleUpdateClick(row)">
+                <el-icon><Edit /></el-icon>
+                修改
+              </el-button>
             </template>
           </DataTable>
         </template>
       </CustomTabs>
     </div>
+
+    <Drawer
+      v-model="drawerVisible"
+      title="修改资产"
+      subtitle="配置资源的基本信息和属性"
+      size="40%"
+      direction="rtl"
+      :header-icon="Setting"
+      :show-footer="true"
+      cancel-button-text="取消"
+      confirm-button-text="保存"
+      @cancel="onEditClosed"
+      @confirm="handleEditSubmit"
+      @closed="onEditClosed"
+    >
+      <Form
+        ref="editFormRef"
+        :attributeFiledsData="editAttributeFieldsData"
+        :attributeGroupsData="editAttributeGroupsData"
+        :modelUid="editModelUid"
+        @list="handleEditSaved"
+        @closed="onEditClosed"
+      />
+    </Drawer>
   </PageContainer>
 </template>
 
 <script lang="ts" setup>
-import { h, onMounted, ref, computed } from "vue"
-import { Search, View, Download } from "@element-plus/icons-vue"
+import { h, onMounted, ref, computed, nextTick } from "vue"
+import { Search, View, Download, Edit, Setting } from "@element-plus/icons-vue"
 import CustomTabs from "@/common/components/Tabs/CustomTabs.vue"
 import ManagerHeader from "@/common/components/ManagerHeader/index.vue"
 import PageContainer from "@/common/components/PageContainer/index.vue"
 import DataTable from "@/common/components/DataTable/index.vue"
 import SecureFieldView from "@/common/components/SecureFieldView/index.vue"
-import { globalSearchData } from "@/api/resource/types/resource"
+import type { globalSearchData, Resource } from "@/api/resource/types/resource"
 import { findSecureData, globalSearchApi } from "@/api/resource"
 import { useRoute } from "vue-router"
-import { Attribute } from "@/api/attribute/types/attribute"
-import { ListAttributeFieldApi } from "@/api/attribute"
+import type { Attribute } from "@/api/attribute/types/attribute"
+import { getModelAttributesWithGroupsApi, ListAttributeFieldApi } from "@/api/attribute"
 import { useSearchStore } from "@/pinia/stores/search"
 import { useModelStore } from "@/pinia/stores/model"
 import { useRouter } from "vue-router"
 import { usePagination } from "@/common/composables/usePagination"
-import { ElMessage, ElMessageBox, UploadProps } from "element-plus"
+import { ElMessage, ElMessageBox } from "element-plus"
+import type { UploadProps } from "element-plus"
 import { useFileDownload } from "@/common/composables/useFileDownload"
+import { Drawer } from "@/common/components/Dialogs"
+import Form from "@/views/resource/warehouse/list/form.vue"
 
 const router = useRouter()
 const route = useRoute()
@@ -170,6 +201,12 @@ const { downloadMinioFile } = useFileDownload()
 
 const inputSearch = ref<string>(route.query.text as string)
 let oldSearch = route.query.text as string
+const drawerVisible = ref(false)
+const editModelUid = ref("")
+const editAttributeFieldsData = ref<Attribute[]>([])
+const editAttributeGroupsData = ref<any[]>([])
+const editAttributesCache = ref<Map<string, { fields: Attribute[]; groups: any[] }>>(new Map())
+const editFormRef = ref<InstanceType<typeof Form>>()
 
 const search = () => {
   if (inputSearch.value.trim() === "") {
@@ -374,6 +411,71 @@ const handlerDetailClick = (row: any) => {
     .catch((error) => {
       console.error("搜索页面路由跳转失败:", error)
     })
+}
+
+const loadEditAttributes = async (modelUid: string) => {
+  const cached = editAttributesCache.value.get(modelUid)
+  if (cached) {
+    editAttributeFieldsData.value = cached.fields
+    editAttributeGroupsData.value = cached.groups
+    return
+  }
+
+  const { data } = await getModelAttributesWithGroupsApi(modelUid)
+  const groups = data.attribute_groups || []
+  const fields = groups.flatMap((group) => group.attributes || [])
+  editAttributeFieldsData.value = fields
+  editAttributeGroupsData.value = groups
+  editAttributesCache.value.set(modelUid, { fields, groups })
+}
+
+const buildEditableResource = (row: any): Resource => {
+  const data = { ...row }
+  delete data._id
+  delete data.id
+  delete data.model_uid
+  delete data.ctime
+  delete data.utime
+
+  Object.keys(data).forEach((key) => {
+    if (key.endsWith("_secure_display")) {
+      delete data[key]
+    }
+  })
+
+  return {
+    id: row.id,
+    name: row.name,
+    model_uid: row.model_uid,
+    data
+  }
+}
+
+const handleUpdateClick = async (row: any) => {
+  try {
+    await loadEditAttributes(row.model_uid)
+    editModelUid.value = row.model_uid
+    drawerVisible.value = true
+    nextTick(() => {
+      editFormRef.value?.setForm(buildEditableResource(row))
+    })
+  } catch (error) {
+    ElMessage.error("获取资产字段失败")
+    console.error("load edit attributes failed:", error)
+  }
+}
+
+const handleEditSubmit = () => {
+  editFormRef.value?.handleSubmit()
+}
+
+const handleEditSaved = () => {
+  listGlobalSearchData(inputSearch.value)
+}
+
+const onEditClosed = () => {
+  editFormRef.value?.resetForm()
+  drawerVisible.value = false
 }
 
 const handleSecureClick = (row: any, item: Attribute) => {

@@ -41,6 +41,16 @@ export interface ExportFilterGroup {
   filters: ExportFilterCondition[]
 }
 
+/** 导出关联模型字段 */
+export interface ExportRelatedField {
+  /** 关联关系名称 */
+  relation_name: string
+  /** 关联模型 UID */
+  model_uid: string
+  /** 关联模型字段 UID */
+  field_uid: string
+}
+
 /** 导出范围枚举 */
 export enum ExportScope {
   /** 全部数据 */
@@ -63,6 +73,8 @@ export interface ExportReq {
   filter_groups?: ExportFilterGroup[]
   /** 导出字段列表 (可选, 默认为全部字段) */
   fields?: string[]
+  /** 关联模型字段列表 */
+  related_fields?: ExportRelatedField[]
   /** 文件名 (可选, 后端可默认生成) */
   file_name?: string
 }

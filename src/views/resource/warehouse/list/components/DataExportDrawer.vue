@@ -153,6 +153,30 @@
               {{ field.name }}
             </el-checkbox>
           </el-checkbox-group>
+
+          <div
+            v-if="loadingRelatedFields || relatedFieldGroups.length > 0"
+            v-loading="loadingRelatedFields"
+            class="related-fields-section"
+          >
+            <div class="related-fields-header">
+              <span class="related-fields-title">关联模型字段</span>
+              <span v-if="relatedSelectedCount > 0" class="related-selected-count"
+                >已选 {{ relatedSelectedCount }} 个</span
+              >
+            </div>
+            <div v-for="group in relatedFieldGroups" :key="group.relationName" class="related-field-group">
+              <div class="related-group-title">{{ group.relationName }} / {{ group.modelName }}</div>
+              <el-checkbox-group
+                v-model="exportOptions.relatedFields"
+                class="field-checkbox-group related-checkbox-group"
+              >
+                <el-checkbox v-for="field in group.fields" :key="field.value" :value="field.value">
+                  {{ field.name }}
+                </el-checkbox>
+              </el-checkbox-group>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -175,6 +199,10 @@
             <span class="preview-label">筛选条件:</span>
             <span class="preview-value">{{ filtersText }}</span>
           </div>
+          <div class="preview-item">
+            <span class="preview-label">关联字段:</span>
+            <span class="preview-value">{{ relatedFieldsText }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -182,12 +210,17 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, computed, type PropType } from "vue"
+import { ref, computed, type PropType, watch } from "vue"
 import { Download, InfoFilled, View, Plus, Delete, Filter, List } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
 import { Drawer } from "@@/components/Dialogs"
 import { useDataIO } from "@/common/composables/useDataIO"
 import { type ExportReq, ExportScope, ExportOperator } from "@/api/resource/dataio/types"
+import { getModelAttributesWithGroupsApi } from "@/api/attribute"
+import { ListModelRelationApi } from "@/api/relation"
+import { getByModelUidsApi } from "@/api/model"
+import type { Attribute } from "@/api/attribute/types/attribute"
+import type { ModelRelation } from "@/api/relation/types/relation"
 
 // 字段接口
 interface ModelField {
@@ -195,6 +228,21 @@ interface ModelField {
   name: string
   type?: string
   options?: any // list 类型字段的选项
+}
+
+interface RelatedFieldOption extends ModelField {
+  relationName: string
+  modelUid: string
+  modelName: string
+  fieldUid: string
+  value: string
+}
+
+interface RelatedFieldGroup {
+  relationName: string
+  modelUid: string
+  modelName: string
+  fields: RelatedFieldOption[]
 }
 
 const props = defineProps({
@@ -255,8 +303,138 @@ interface FilterGroup {
 const exportOptions = ref({
   scope: ExportScope.ALL,
   filterGroups: [] as FilterGroup[],
-  fields: [] as string[]
+  fields: [] as string[],
+  relatedFields: [] as string[]
 })
+
+const loadingRelatedFields = ref(false)
+const relatedFieldGroups = ref<RelatedFieldGroup[]>([])
+
+const relatedFieldMap = computed(() => {
+  const map = new Map<string, RelatedFieldOption>()
+  relatedFieldGroups.value.forEach((group) => {
+    group.fields.forEach((field) => {
+      map.set(field.value, field)
+    })
+  })
+  return map
+})
+
+const relatedSelectedCount = computed(() => exportOptions.value.relatedFields.length)
+
+const buildRelatedFieldValue = (relationName: string, modelUid: string, fieldUid: string) => {
+  return `${relationName}@@${modelUid}@@${fieldUid}`
+}
+
+const getRelatedModelUid = (relation: ModelRelation) => {
+  if (relation.source_model_uid === props.modelUid) {
+    return relation.target_model_uid
+  }
+  if (relation.target_model_uid === props.modelUid) {
+    return relation.source_model_uid
+  }
+  return ""
+}
+
+const flattenAttributes = (groups: Array<{ attributes?: Attribute[] }>) => {
+  const attrs: Attribute[] = []
+  groups.forEach((group) => {
+    if (Array.isArray(group.attributes)) {
+      attrs.push(...group.attributes)
+    }
+  })
+  return attrs
+}
+
+const loadRelatedFields = async () => {
+  if (!props.modelUid) {
+    relatedFieldGroups.value = []
+    exportOptions.value.relatedFields = []
+    return
+  }
+
+  loadingRelatedFields.value = true
+  try {
+    const { data } = await ListModelRelationApi({
+      model_uid: props.modelUid,
+      offset: 0,
+      limit: 1000
+    })
+    const relations = data.model_relations || []
+    if (relations.length === 0) {
+      relatedFieldGroups.value = []
+      exportOptions.value.relatedFields = []
+      return
+    }
+
+    const relatedModelUids = Array.from(
+      new Set(relations.map((relation) => getRelatedModelUid(relation)).filter(Boolean))
+    )
+
+    const modelNameMap = new Map<string, string>()
+    if (relatedModelUids.length > 0) {
+      const { data: modelData } = await getByModelUidsApi(relatedModelUids)
+      const models = modelData.models || []
+      models.forEach((model) => {
+        modelNameMap.set(model.uid, model.name || model.uid)
+      })
+    }
+
+    const attrsByModel = new Map<string, ModelField[]>()
+    await Promise.all(
+      relatedModelUids.map(async (uid) => {
+        const { data: attrData } = await getModelAttributesWithGroupsApi(uid)
+        const attrs = flattenAttributes(attrData.attribute_groups || [])
+          .filter((attr) => attr.field_type !== "file")
+          .map((attr) => ({
+            id: attr.field_uid,
+            name: attr.field_name,
+            type: attr.field_type,
+            options: attr.option
+          }))
+        attrsByModel.set(uid, attrs)
+      })
+    )
+
+    relatedFieldGroups.value = relations
+      .map((relation) => {
+        const relatedModelUid = getRelatedModelUid(relation)
+        if (!relatedModelUid) {
+          return null
+        }
+        const modelName = modelNameMap.get(relatedModelUid) || relatedModelUid
+        const fields = (attrsByModel.get(relatedModelUid) || []).map((field) => {
+          const value = buildRelatedFieldValue(relation.relation_name, relatedModelUid, field.id)
+          return {
+            ...field,
+            id: value,
+            value,
+            relationName: relation.relation_name,
+            modelUid: relatedModelUid,
+            modelName,
+            fieldUid: field.id
+          }
+        })
+        return {
+          relationName: relation.relation_name,
+          modelUid: relatedModelUid,
+          modelName,
+          fields
+        }
+      })
+      .filter((group): group is RelatedFieldGroup => !!group && group.fields.length > 0)
+
+    const validValues = new Set(relatedFieldGroups.value.flatMap((group) => group.fields.map((field) => field.value)))
+    exportOptions.value.relatedFields = exportOptions.value.relatedFields.filter((value) => validValues.has(value))
+  } catch (error) {
+    relatedFieldGroups.value = []
+    exportOptions.value.relatedFields = []
+    console.error("加载关联模型字段失败:", error)
+    ElMessage.warning("加载关联模型字段失败")
+  } finally {
+    loadingRelatedFields.value = false
+  }
+}
 
 // 全选状态
 const isIndeterminate = computed(() => {
@@ -274,10 +452,15 @@ const checkAll = computed({
 
 // 初始化字段选择 (默认全选)
 watch([() => props.modelValue, () => props.modelFields], ([val, fields]) => {
-  if (val && fields && fields.length > 0) {
+  if (val) {
     // 仅在字段列表为空时才初始化全选，保留用户可能的修改（如果未关闭 Drawer）
     // 或者每次打开都重置？通常重置更好
-    exportOptions.value.fields = fields.map((f) => f.id)
+    exportOptions.value.fields = fields && fields.length > 0 ? fields.map((f) => f.id) : []
+    exportOptions.value.relatedFields = []
+    void loadRelatedFields()
+  } else {
+    relatedFieldGroups.value = []
+    exportOptions.value.relatedFields = []
   }
 })
 
@@ -382,6 +565,11 @@ const filtersText = computed(() => {
   return `${groupCount} 个条件组 (共 ${totalFilters} 个条件)`
 })
 
+const relatedFieldsText = computed(() => {
+  const count = relatedSelectedCount.value
+  return count > 0 ? `${count} 个关联字段` : "未选择"
+})
+
 // 导出范围文本
 const exportScopeText = computed(() => {
   switch (exportOptions.value.scope) {
@@ -409,11 +597,21 @@ const handleExport = async () => {
   }
 
   try {
+    const relatedFields = exportOptions.value.relatedFields
+      .map((value) => relatedFieldMap.value.get(value))
+      .filter((field): field is RelatedFieldOption => !!field)
+      .map((field) => ({
+        relation_name: field.relationName,
+        model_uid: field.modelUid,
+        field_uid: field.fieldUid
+      }))
+
     const req: ExportReq = {
       model_uid: props.modelUid,
       scope: exportOptions.value.scope,
       fields: exportOptions.value.fields,
-      filter_groups: []
+      filter_groups: [],
+      related_fields: relatedFields
     }
 
     // 设置导出范围相关参数
@@ -570,6 +768,51 @@ const handleClose = () => {
           font-size: 13px;
           color: #4b5563;
         }
+      }
+    }
+
+    .related-fields-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed #e5e7eb;
+      min-height: 40px;
+
+      .related-fields-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+
+      .related-fields-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #111827;
+      }
+
+      .related-selected-count {
+        font-size: 12px;
+        color: #0891b2;
+        font-weight: 600;
+      }
+
+      .related-field-group {
+        margin-top: 12px;
+
+        &:first-of-type {
+          margin-top: 0;
+        }
+      }
+
+      .related-group-title {
+        margin-bottom: 10px;
+        font-size: 12px;
+        color: #6b7280;
+        font-weight: 600;
+      }
+
+      .related-checkbox-group {
+        padding-left: 8px;
       }
     }
 

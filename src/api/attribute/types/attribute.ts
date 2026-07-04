@@ -46,6 +46,8 @@ export interface Attribute {
   required: boolean
   display?: boolean
   index?: number
+  sort_key?: number
+  display_index?: number
   secure: boolean
   link: boolean
   option: any

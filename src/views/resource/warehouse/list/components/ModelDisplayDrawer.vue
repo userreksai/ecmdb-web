@@ -157,13 +157,28 @@ const paginationData = reactive({
 
 const drawerTitle = computed(() => `展示列表 - ${props.modelName || props.modelUid}`)
 
+const getNormalSortValue = (field: Attribute) => field.sort_key ?? field.index ?? Number.MAX_SAFE_INTEGER
+const getDisplaySortValue = (field: Attribute) => field.display_index ?? getNormalSortValue(field)
+
+const sortByNormalOrder = (a: Attribute, b: Attribute) => {
+  const indexA = getNormalSortValue(a)
+  const indexB = getNormalSortValue(b)
+  if (indexA !== indexB) return indexA - indexB
+  return a.id - b.id
+}
+
 const sortedFields = computed(() => {
-  return [...props.modelFields].sort((a, b) => {
-    const indexA = a.index ?? 100
-    const indexB = b.index ?? 100
-    if (indexA !== indexB) return indexA - indexB
-    return a.id - b.id
-  })
+  const displayFields = props.modelFields
+    .filter((field) => field.display)
+    .sort((a, b) => {
+      const indexA = getDisplaySortValue(a)
+      const indexB = getDisplaySortValue(b)
+      if (indexA !== indexB) return indexA - indexB
+      return sortByNormalOrder(a, b)
+    })
+  const hiddenFields = props.modelFields.filter((field) => !field.display).sort(sortByNormalOrder)
+
+  return [...displayFields, ...hiddenFields]
 })
 
 const visibleColumns = computed(() => {

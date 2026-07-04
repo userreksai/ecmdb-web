@@ -224,7 +224,8 @@ const handleShowExportDialog = () => {
   exportDialogVisible.value = true
 }
 
-const handleShowDisplayList = () => {
+const handleShowDisplayList = async () => {
+  await listAttributeFields()
   displayListVisible.value = true
 }
 
@@ -321,7 +322,7 @@ const handleDetailClick = (resource: Resource) => {
 }
 
 // ** 获取资产字段信息 */
-const listAttributeFields = () => {
+const listAttributeFields = async () => {
   if (!modelUid.value) {
     attributeFiledsData.value = []
     attributeGroupsData.value = []
@@ -329,28 +330,25 @@ const listAttributeFields = () => {
     return
   }
 
-  getModelAttributesWithGroupsApi(modelUid.value)
-    .then(({ data }) => {
-      // 保存分组数据
-      attributeGroupsData.value = data.attribute_groups
+  try {
+    const { data } = await getModelAttributesWithGroupsApi(modelUid.value)
+    // 保存分组数据
+    attributeGroupsData.value = data.attribute_groups
 
-      // 将分组数据转换为平铺的字段列表
-      const allFields: Attribute[] = []
-      data.attribute_groups.forEach((group) => {
-        if (group.attributes) {
-          allFields.push(...group.attributes)
-        }
-      })
-      attributeFiledsData.value = allFields
-      sortFields()
+    // 将分组数据转换为平铺的字段列表
+    const allFields: Attribute[] = []
+    data.attribute_groups.forEach((group) => {
+      if (group.attributes) {
+        allFields.push(...group.attributes)
+      }
     })
-    .catch(() => {
-      attributeFiledsData.value = []
-      attributeGroupsData.value = []
-    })
-    .finally(() => {
-      // ...
-    })
+    attributeFiledsData.value = allFields
+    sortFields()
+  } catch {
+    attributeFiledsData.value = []
+    attributeGroupsData.value = []
+    displayFileds.value = []
+  }
 }
 
 // ** 过滤展示字段，并排序 */
@@ -358,9 +356,10 @@ const sortFields = () => {
   displayFileds.value = attributeFiledsData.value
     .filter((item) => item.display === true)
     .sort((a, b) => {
-      const indexA = a.index ?? 100
-      const indexB = b.index ?? 100
-      return indexA - indexB
+      const indexA = a.display_index ?? a.sort_key ?? a.index ?? 100
+      const indexB = b.display_index ?? b.sort_key ?? b.index ?? 100
+      if (indexA !== indexB) return indexA - indexB
+      return a.id - b.id
     })
 }
 

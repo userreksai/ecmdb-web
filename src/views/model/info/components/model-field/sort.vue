@@ -119,7 +119,10 @@ const handleSortFilter = () => {
   attributesData.forEach((item) => {
     item.attributes.forEach((attr) => {
       const list = attr.display ? rightList : leftList
-      list.value.push({ name: attr.field_name, id: attr.id, index: attr.index || 0 })
+      const index = attr.display
+        ? attr.display_index ?? attr.sort_key ?? attr.index ?? 0
+        : attr.sort_key ?? attr.index ?? 0
+      list.value.push({ name: attr.field_name, id: attr.id, index })
     })
   })
 

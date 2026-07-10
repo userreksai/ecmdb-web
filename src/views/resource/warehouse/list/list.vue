@@ -51,6 +51,15 @@
 
           <el-divider direction="vertical" />
 
+          <el-button
+            type="warning"
+            :icon="Edit"
+            :disabled="selectedResourceIds.length === 0"
+            class="action-btn"
+            @click="handleShowBatchUpdate"
+          >
+            批量修改
+          </el-button>
           <el-button type="primary" :icon="CirclePlus" class="action-btn" @click="handlerCreate">新增资源</el-button>
           <el-button type="primary" :icon="View" class="action-btn" @click="handleShowDisplayList">展示列表</el-button>
           <el-button type="primary" :icon="RefreshRight" circle class="refresh-btn" @click="handleRefreshResources" />
@@ -59,10 +68,12 @@
     </ManagerHeader>
 
     <DataTable
+      ref="dataTableRef"
       v-loading="loading"
       :data="resourcesData"
       :columns="tableColumns"
       :show-selection="true"
+      :reserve-selection="true"
       :show-pagination="true"
       :total="paginationData.total"
       :page-size="paginationData.pageSize"
@@ -112,6 +123,19 @@
       <!-- 操作列插槽 -->
       <template #actions="{ row }">
         <OperateBtn :items="operateBtnItems" @routeEvent="handleOperateEvent" :operateItem="row" :maxLength="2" />
+      </template>
+
+      <template #pagination-left>
+        <div class="selection-summary">
+          <span>
+            已选择
+            <strong>{{ selectedResourceIds.length }}</strong>
+            条
+          </span>
+          <el-button v-if="selectedResourceIds.length > 0" link type="primary" @click="clearResourceSelection">
+            清空
+          </el-button>
+        </div>
       </template>
     </DataTable>
     <!-- 新增或编辑资源 -->
@@ -163,6 +187,79 @@
       :model-name="modelName"
       :model-fields="attributeFiledsData"
     />
+
+    <el-dialog
+      v-model="batchDialogVisible"
+      title="批量修改字段"
+      width="520px"
+      :close-on-click-modal="!batchSubmitting"
+      :close-on-press-escape="!batchSubmitting"
+      :show-close="!batchSubmitting"
+      @closed="handleBatchDialogClosed"
+    >
+      <div class="batch-dialog-summary">
+        本次将修改 <strong>{{ selectedResourceIds.length }}</strong> 条数据，每条数据只更新所选字段。
+      </div>
+
+      <el-alert
+        title="为避免绕过后端加密和文件处理逻辑，加密字段与文件字段暂不支持批量修改。"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="batch-field-alert"
+      />
+
+      <el-form ref="batchFormRef" :model="batchForm" :rules="batchFormRules" label-position="top">
+        <el-form-item label="要修改的字段" prop="fieldUid">
+          <el-select v-model="batchForm.fieldUid" placeholder="请选择模型字段" filterable class="batch-field-control">
+            <el-option
+              v-for="field in batchEditableFields"
+              :key="field.field_uid"
+              :label="field.field_name"
+              :value="field.field_uid"
+            >
+              <span>{{ field.field_name }}</span>
+              <span class="batch-field-meta">{{ field.field_uid }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+
+        <el-form-item label="新的字段值" prop="value">
+          <el-select
+            v-if="selectedBatchField?.field_type === 'list'"
+            v-model="batchForm.value"
+            placeholder="请选择新的字段值"
+            filterable
+            class="batch-field-control"
+          >
+            <el-option
+              v-for="option in selectedBatchField.option || []"
+              :key="option"
+              :label="option"
+              :value="option"
+            />
+          </el-select>
+          <el-input
+            v-else
+            v-model="batchForm.value"
+            :type="selectedBatchField?.field_type === 'multiline' ? 'textarea' : 'text'"
+            :rows="4"
+            placeholder="请输入新的字段值"
+            clearable
+          />
+        </el-form-item>
+      </el-form>
+
+      <div v-if="batchSubmitting" class="batch-progress">
+        <el-progress :percentage="batchProgressPercent" :stroke-width="10" />
+        <span>已处理 {{ batchProgressCompleted }} / {{ batchProgressTotal }} 条</span>
+      </div>
+
+      <template #footer>
+        <el-button :disabled="batchSubmitting" @click="batchDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchSubmitting" @click="handleBatchUpdate">确认修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -171,15 +268,31 @@ import { onMounted, onUnmounted, ref, watch, h, nextTick, computed, markRaw } fr
 import { useRoute } from "vue-router"
 import { type Attribute } from "@/api/attribute/types/attribute"
 import { getModelAttributesWithGroupsApi } from "@/api/attribute"
-import { listResourceApi, searchModelResourceApi, deleteResourceApi, findSecureData } from "@/api/resource"
+import {
+  listResourceApi,
+  searchModelResourceApi,
+  deleteResourceApi,
+  findSecureData,
+  setCustomFieldApi
+} from "@/api/resource"
 import { type Resource } from "@/api/resource/types/resource"
-import { CirclePlus, Edit, Delete, View, Setting, Download, Upload, RefreshRight, Search } from "@element-plus/icons-vue"
+import {
+  CirclePlus,
+  Edit,
+  Delete,
+  View,
+  Setting,
+  Download,
+  Upload,
+  RefreshRight,
+  Search
+} from "@element-plus/icons-vue"
 import { usePagination } from "@/common/composables/usePagination"
 import ManagerHeader from "@@/components/ManagerHeader/index.vue"
 import DataTable from "@@/components/DataTable/index.vue"
 import OperateBtn from "@@/components/OperateBtn/index.vue"
 import { Drawer } from "@@/components/Dialogs"
-import { ElMessage, ElMessageBox, type UploadUserFile } from "element-plus"
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadUserFile } from "element-plus"
 import router from "@/router"
 
 import Form from "./form.vue"
@@ -208,6 +321,7 @@ const { exporting, exportTemplate } = useDataIO()
 const importDialogVisible = ref(false)
 const exportDialogVisible = ref(false)
 const displayListVisible = ref(false)
+const dataTableRef = ref<InstanceType<typeof DataTable>>()
 
 // 导出模板
 const handleExportTemplate = async () => {
@@ -260,6 +374,156 @@ const currentResourceIds = computed(() => resourcesData.value.map((r) => r.id))
 // 处理选择变化
 const handleSelectionChange = (selection: Resource[]) => {
   selectedResources.value = selection
+}
+
+const clearResourceSelection = () => {
+  dataTableRef.value?.clearSelection()
+  selectedResources.value = []
+}
+
+const batchDialogVisible = ref(false)
+const batchSubmitting = ref(false)
+const batchProgressCompleted = ref(0)
+const batchProgressTotal = ref(0)
+const batchFormRef = ref<FormInstance>()
+const batchForm = ref({
+  fieldUid: "",
+  value: ""
+})
+
+watch(
+  () => batchForm.value.fieldUid,
+  (fieldUid, previousFieldUid) => {
+    if (previousFieldUid && fieldUid !== previousFieldUid) {
+      batchForm.value.value = ""
+    }
+  }
+)
+
+const batchEditableFields = computed(() => {
+  return attributeFiledsData.value.filter((field) => !field.secure && field.field_type !== "file")
+})
+
+const selectedBatchField = computed(() => {
+  return batchEditableFields.value.find((field) => field.field_uid === batchForm.value.fieldUid)
+})
+
+const batchProgressPercent = computed(() => {
+  if (batchProgressTotal.value === 0) return 0
+  return Math.round((batchProgressCompleted.value / batchProgressTotal.value) * 100)
+})
+
+const batchFormRules: FormRules = {
+  fieldUid: [{ required: true, message: "请选择要修改的字段", trigger: "change" }],
+  value: [{ required: true, whitespace: true, message: "请输入新的字段值", trigger: ["blur", "change"] }]
+}
+
+const handleShowBatchUpdate = () => {
+  if (selectedResources.value.length === 0) {
+    ElMessage.warning("请先选择要修改的数据")
+    return
+  }
+  if (batchEditableFields.value.length === 0) {
+    ElMessage.warning("当前模型没有可批量修改的普通字段")
+    return
+  }
+
+  batchForm.value = { fieldUid: "", value: "" }
+  batchProgressCompleted.value = 0
+  batchProgressTotal.value = 0
+  batchDialogVisible.value = true
+}
+
+const handleBatchDialogClosed = () => {
+  if (batchSubmitting.value) return
+  batchFormRef.value?.resetFields()
+  batchForm.value = { fieldUid: "", value: "" }
+  batchProgressCompleted.value = 0
+  batchProgressTotal.value = 0
+}
+
+const updateResourcesWithConcurrency = async (resources: Resource[], fieldUid: string, value: any) => {
+  const failedResources: Resource[] = []
+  let nextIndex = 0
+  const workerCount = Math.min(5, resources.length)
+
+  const worker = async () => {
+    while (nextIndex < resources.length) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      const resource = resources[currentIndex]
+
+      try {
+        await setCustomFieldApi({
+          id: resource.id,
+          field: fieldUid,
+          data: value
+        })
+      } catch (error) {
+        failedResources.push(resource)
+        console.error(`batch update resource ${resource.id} failed:`, error)
+      } finally {
+        batchProgressCompleted.value += 1
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return failedResources
+}
+
+const handleBatchUpdate = async () => {
+  if (batchSubmitting.value) return
+
+  try {
+    await batchFormRef.value?.validate()
+  } catch {
+    return
+  }
+
+  const field = selectedBatchField.value
+  if (!field) {
+    ElMessage.error("所选字段已不存在，请重新选择")
+    return
+  }
+
+  const resources = [...selectedResources.value]
+  const value = typeof batchForm.value.value === "string" ? batchForm.value.value.trim() : batchForm.value.value
+
+  try {
+    await ElMessageBox.confirm(
+      `确认将 ${resources.length} 条数据的“${field.field_name}”修改为“${String(value)}”？`,
+      "批量修改确认",
+      {
+        confirmButtonText: "确认修改",
+        cancelButtonText: "取消",
+        type: "warning"
+      }
+    )
+  } catch {
+    return
+  }
+
+  batchSubmitting.value = true
+  batchProgressCompleted.value = 0
+  batchProgressTotal.value = resources.length
+
+  try {
+    const failedResources = await updateResourcesWithConcurrency(resources, field.field_uid, value)
+    const successCount = resources.length - failedResources.length
+
+    await listResourceByModelUid()
+
+    if (failedResources.length === 0) {
+      ElMessage.success(`批量修改完成，共成功修改 ${successCount} 条数据`)
+      clearResourceSelection()
+      batchDialogVisible.value = false
+    } else {
+      ElMessage.warning(`批量修改部分完成：成功 ${successCount} 条，失败 ${failedResources.length} 条，可再次确认重试`)
+    }
+  } finally {
+    batchSubmitting.value = false
+  }
 }
 
 import type { Column } from "@@/components/DataTable/types"
@@ -400,7 +664,7 @@ const listResourceByModelUid = async () => {
 }
 
 const handleSearch = () => {
-  selectedResources.value = []
+  clearResourceSelection()
   if (paginationData.currentPage === 1) {
     listResourceByModelUid()
   } else {
@@ -422,6 +686,7 @@ const handleDelete = (row: Resource) => {
   }).then(() => {
     deleteResourceApi(row.id).then(() => {
       ElMessage.success("删除成功")
+      clearResourceSelection()
       listResourceByModelUid()
     })
   })
@@ -507,7 +772,7 @@ watch([() => paginationData.currentPage, () => paginationData.pageSize], listRes
 watch(
   () => modelUid.value,
   () => {
-    selectedResources.value = []
+    clearResourceSelection()
     resourcesData.value = []
     searchKeyword.value = ""
     if (paginationData.currentPage === 1) {
@@ -598,9 +863,55 @@ watch(
     width: 260px;
   }
 
+  .selection-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #606266;
+    font-size: 14px;
+
+    strong {
+      color: var(--primary, #3b82f6);
+      font-size: 16px;
+    }
+  }
+
   :deep(.el-divider--vertical) {
     margin: 0 2px;
   }
+}
+
+.batch-dialog-summary {
+  margin-bottom: 14px;
+  color: #374151;
+
+  strong {
+    color: var(--primary, #3b82f6);
+    font-size: 16px;
+  }
+}
+
+.batch-field-alert {
+  margin-bottom: 18px;
+}
+
+.batch-field-control {
+  width: 100%;
+}
+
+.batch-field-meta {
+  float: right;
+  margin-left: 20px;
+  color: #8492a6;
+  font-size: 12px;
+}
+
+.batch-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #606266;
+  font-size: 13px;
 }
 
 @media (max-width: 1200px) {

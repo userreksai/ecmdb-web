@@ -17,7 +17,13 @@
             row-key="id"
           >
             <!-- 选择列 -->
-            <el-table-column v-if="showSelection" type="selection" width="50" align="center" />
+            <el-table-column
+              v-if="showSelection"
+              type="selection"
+              width="50"
+              align="center"
+              :reserve-selection="reserveSelection"
+            />
 
             <!-- 拖拽列 -->
             <el-table-column v-if="enableRowDrag" label="拖拽" width="85" align="center">
@@ -94,6 +100,9 @@
 
         <!-- 分页器 -->
         <div v-if="showPagination" class="pagination-container">
+          <div class="pagination-left">
+            <slot name="pagination-left" />
+          </div>
           <el-pagination
             background
             :layout="paginationLayout"
@@ -122,6 +131,7 @@ interface Props {
   columns: Column[]
   actions?: Action[]
   showSelection?: boolean
+  reserveSelection?: boolean
   actionColumnLabel?: string
   actionColumnWidth?: string | number
   actionColumnFixed?: "left" | "right"
@@ -141,6 +151,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   showSelection: false,
+  reserveSelection: false,
   actionColumnLabel: "操作",
   actionColumnWidth: 200,
   enableRowDrag: false,
@@ -543,11 +554,18 @@ defineExpose({
 .pagination-container {
   flex-shrink: 0;
   display: flex;
+  align-items: center;
+  gap: 16px;
   justify-content: flex-end;
   padding: calc(0.6rem + 0.25vw) calc(0.8rem + 0.35vw);
   background: #f8fafc;
   border-top: 1px solid #e2e8f0;
   margin-top: auto;
+}
+
+.pagination-left {
+  margin-right: auto;
+  min-width: 0;
 }
 
 // 行拖拽相关样式

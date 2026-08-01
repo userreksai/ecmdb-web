@@ -10,8 +10,8 @@ export const useModelStore = defineStore(
     const modelMap = ref(new Map<string, string>())
 
     /** 获取模型信息 */
-    const ListModelsByGroup = async () => {
-      const { data } = await ListModelsByGroupApi()
+    const ListModelsByGroup = async (applyModelPermission = false) => {
+      const { data } = await ListModelsByGroupApi(applyModelPermission)
       modelsData.value = data.mgs
 
       return { data }

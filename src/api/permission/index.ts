@@ -10,10 +10,10 @@ export function getRolePermissionApi(role_code: string) {
   })
 }
 
-export function changeRoleMenuPermissionApi(menuIds: number[], roleCode: string) {
+export function changeRoleMenuPermissionApi(menuIds: number[], roleCode: string, deniedModelUids: string[]) {
   return instance.post<boolean>({
     url: `${API_SERVICE.CMDB}/permission/change`,
-    data: { menu_ids: menuIds, role_code: roleCode }
+    data: { menu_ids: menuIds, role_code: roleCode, denied_model_uids: deniedModelUids }
   })
 }
 

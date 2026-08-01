@@ -56,7 +56,7 @@
               <div class="menu-cell" :style="row.level > 0 ? { paddingLeft: `${row.level * 20}px` } : {}">
                 <el-checkbox
                   :model-value="checkedKeys.includes(row.id)"
-                  @change="(val) => handleCheck(row, val as boolean)"
+                  @change="(val) => handleCheck(row as any, val as boolean)"
                 >
                   {{ row.meta?.title || row.name }}
                 </el-checkbox>
@@ -79,6 +79,45 @@
             </template>
           </DataTable>
         </div>
+
+        <div class="model-permission-section">
+          <div class="model-section-header">
+            <div>
+              <h3>资产模型可见范围</h3>
+              <p>默认全部可见；取消模型后，该角色不能查看对应资产数据。</p>
+            </div>
+            <div class="model-section-actions">
+              <span>已选择 {{ selectedModelUIDs.length }} / {{ allModelUIDs.length }}</span>
+              <el-button @click="toggleAllModels">
+                {{ isAllModelsSelected ? "取消全选" : "全选模型" }}
+              </el-button>
+            </div>
+          </div>
+
+          <div class="model-matrix">
+            <div v-for="group in modelGroups" :key="group.group_id" class="model-matrix-row">
+              <div class="model-group-cell">
+                <el-checkbox
+                  :model-value="isModelGroupSelected(group)"
+                  :indeterminate="isModelGroupIndeterminate(group)"
+                  @change="(value) => toggleModelGroup(group, value as boolean)"
+                >
+                  {{ group.group_name }}
+                </el-checkbox>
+              </div>
+              <div class="model-options-cell">
+                <el-checkbox
+                  v-for="model in group.models"
+                  :key="model.uid"
+                  :model-value="selectedModelUIDs.includes(model.uid)"
+                  @change="(value) => toggleModel(model.uid, value as boolean)"
+                >
+                  {{ model.name }}（{{ model.uid }}）
+                </el-checkbox>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </PageContainer>
   </div>
@@ -94,6 +133,7 @@ import PageContainer from "@@/components/PageContainer/index.vue"
 import DataTable from "@@/components/DataTable/index.vue"
 import { useMatrixPermission } from "./composables/useMatrixPermission"
 import { PLATFORMS } from "@/common/constants/platforms"
+import type { ModelPermissionGroup } from "@/api/permission/types/permission"
 
 const route = useRoute()
 const router = useRouter()
@@ -108,12 +148,33 @@ const {
   menuTreeData,
   flatMenuList,
   selectedPlatforms,
+  modelGroups,
+  selectedModelUIDs,
+  allModelUIDs,
   loadPermissionData,
   handleCheck,
   toggleSelectAll,
+  toggleModel,
+  toggleModelGroup,
+  toggleAllModels,
   savePermission,
   resetPermission
 } = useMatrixPermission()
+
+const selectedCountInGroup = (group: ModelPermissionGroup) =>
+  group.models.filter((model) => selectedModelUIDs.value.includes(model.uid)).length
+
+const isModelGroupSelected = (group: ModelPermissionGroup) =>
+  group.models.length > 0 && selectedCountInGroup(group) === group.models.length
+
+const isModelGroupIndeterminate = (group: ModelPermissionGroup) => {
+  const count = selectedCountInGroup(group)
+  return count > 0 && count < group.models.length
+}
+
+const isAllModelsSelected = computed(
+  () => allModelUIDs.value.length > 0 && allModelUIDs.value.every((uid) => selectedModelUIDs.value.includes(uid))
+)
 
 import type { Column } from "@@/components/DataTable/types"
 
@@ -214,6 +275,77 @@ onMounted(() => {
   background: white;
   border-radius: 8px;
   overflow: hidden;
+}
+
+.model-permission-section {
+  margin-top: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.model-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+
+  h3 {
+    margin: 0 0 4px;
+    color: #1e293b;
+    font-size: 16px;
+  }
+
+  p {
+    margin: 0;
+    color: #64748b;
+    font-size: 12px;
+  }
+}
+
+.model-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #475569;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.model-matrix-row {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  min-height: 56px;
+  border-bottom: 1px solid #e2e8f0;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.model-group-cell,
+.model-options-cell {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+}
+
+.model-group-cell {
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+}
+
+.model-options-cell {
+  flex-wrap: wrap;
+  gap: 10px 18px;
+
+  :deep(.el-checkbox) {
+    margin-right: 0;
+  }
 }
 
 .menu-cell {

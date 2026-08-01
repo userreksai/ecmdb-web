@@ -116,7 +116,7 @@ const selectGroup = (groupId: string | number) => {
 
 const getModelsData = () => {
   useModelStore()
-    .ListModelsByGroup()
+    .ListModelsByGroup(true)
     .then(({ data }) => {
       groupModelsData.value = data.mgs
       if (groupModelsData.value.length === 0) {

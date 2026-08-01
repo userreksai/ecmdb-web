@@ -106,12 +106,9 @@ export const useMatrixPermission = () => {
   const selectedPlatforms = ref<string[]>([])
   const modelGroups = ref<ModelPermissionGroup[]>([])
   const selectedModelUIDs = ref<string[]>([])
+  const isAdminRole = ref(false)
 
   const allModelUIDs = computed(() => modelGroups.value.flatMap((group) => group.models.map((model) => model.uid)))
-  const deniedModelUIDs = computed(() => {
-    const selected = new Set(selectedModelUIDs.value)
-    return allModelUIDs.value.filter((uid) => !selected.has(uid))
-  })
 
   /**
    * NOTE: 扁平化菜单列表（应用平台过滤）
@@ -133,13 +130,16 @@ export const useMatrixPermission = () => {
    */
   const loadPermissionData = async (roleCode: string) => {
     loading.value = true
+    isAdminRole.value = roleCode === "admin"
     try {
       const { data } = await getRolePermissionApi(roleCode)
       menuTreeData.value = data.menus || []
       checkedKeys.value = data.authz_ids || []
       modelGroups.value = data.model_groups || []
-      const denied = new Set(data.denied_model_uids || [])
-      selectedModelUIDs.value = allModelUIDs.value.filter((uid) => !denied.has(uid))
+      const allowed = new Set(data.allowed_model_uids || [])
+      selectedModelUIDs.value = isAdminRole.value
+        ? [...allModelUIDs.value]
+        : allModelUIDs.value.filter((uid) => allowed.has(uid))
     } catch (error) {
       console.error("加载权限数据失败:", error)
       menuTreeData.value = []
@@ -198,18 +198,21 @@ export const useMatrixPermission = () => {
   }
 
   const toggleModel = (modelUID: string, checked: boolean) => {
+    if (isAdminRole.value) return
     const next = new Set(selectedModelUIDs.value)
     checked ? next.add(modelUID) : next.delete(modelUID)
     selectedModelUIDs.value = Array.from(next)
   }
 
   const toggleModelGroup = (group: ModelPermissionGroup, checked: boolean) => {
+    if (isAdminRole.value) return
     const next = new Set(selectedModelUIDs.value)
     group.models.forEach((model) => (checked ? next.add(model.uid) : next.delete(model.uid)))
     selectedModelUIDs.value = Array.from(next)
   }
 
   const toggleAllModels = () => {
+    if (isAdminRole.value) return
     const allSelected =
       allModelUIDs.value.length > 0 && allModelUIDs.value.every((uid) => selectedModelUIDs.value.includes(uid))
     selectedModelUIDs.value = allSelected ? [] : [...allModelUIDs.value]
@@ -221,7 +224,8 @@ export const useMatrixPermission = () => {
   const savePermission = async (roleCode: string) => {
     saving.value = true
     try {
-      const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode, deniedModelUIDs.value)
+      const allowedModelUIDs = isAdminRole.value ? [...allModelUIDs.value] : [...selectedModelUIDs.value]
+      const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode, allowedModelUIDs)
       if (data) {
         ElMessage.success("权限保存成功")
         return true
@@ -251,6 +255,7 @@ export const useMatrixPermission = () => {
     selectedPlatforms,
     modelGroups,
     selectedModelUIDs,
+    isAdminRole,
     allModelUIDs,
     flatMenuList,
     loadPermissionData,

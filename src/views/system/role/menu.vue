@@ -5,7 +5,7 @@
         <el-radio-button value="menu">菜单权限</el-radio-button>
         <el-radio-button value="model">模型可见范围</el-radio-button>
       </el-radio-group>
-      <span class="mode-tip">模型默认全部可见，取消勾选后该角色将无法访问对应资产数据</span>
+      <span class="mode-tip">普通角色默认不可见，勾选后才可访问；admin 超级管理员始终可见全部模型</span>
     </div>
 
     <div v-show="activePermissionTab === 'menu'" class="menu-permission-content">
@@ -146,7 +146,7 @@
           class="model-search"
         />
         <span class="model-summary">已选择 {{ selectedModelUIDs.length }} / {{ allModelUIDs.length }} 个模型</span>
-        <el-button @click="toggleAllModels">
+        <el-button :disabled="isAdminRole" @click="toggleAllModels">
           {{ areAllModelsSelected ? "取消全选" : "全选模型" }}
         </el-button>
       </div>
@@ -158,13 +158,14 @@
             <el-checkbox
               :model-value="isModelGroupSelected(group)"
               :indeterminate="isModelGroupIndeterminate(group)"
+              :disabled="isAdminRole"
               @change="(value) => toggleModelGroup(group, value as boolean)"
             >
               {{ group.group_name }}
             </el-checkbox>
             <span>{{ selectedCountInGroup(group) }} / {{ group.models.length }}</span>
           </div>
-          <el-checkbox-group v-model="selectedModelUIDs" class="model-checkbox-grid">
+          <el-checkbox-group v-model="selectedModelUIDs" :disabled="isAdminRole" class="model-checkbox-grid">
             <el-checkbox v-for="model in group.models" :key="model.uid" :value="model.uid" border>
               <span class="model-option-name">{{ model.name }}</span>
               <span class="model-option-uid">{{ model.uid }}</span>
@@ -191,7 +192,7 @@ interface Props {
 }
 
 interface Emits {
-  (e: "confirm", menus: Array<{ id: number; name: string; path: string; meta: any }>, deniedModelUIDs: string[]): void
+  (e: "confirm", menus: Array<{ id: number; name: string; path: string; meta: any }>, allowedModelUIDs: string[]): void
   (e: "cancel"): void
 }
 
@@ -210,6 +211,7 @@ const activePermissionTab = ref<"menu" | "model">("menu")
 const modelFilter = ref("")
 const modelGroups = ref<ModelPermissionGroup[]>([])
 const selectedModelUIDs = ref<string[]>([])
+const isAdminRole = computed(() => props.roleCode === "admin")
 
 // 按钮状态
 const isAllExpanded = ref(true) // 是否全部展开
@@ -246,6 +248,7 @@ const isModelGroupIndeterminate = (group: ModelPermissionGroup) => {
 }
 
 const toggleModelGroup = (group: ModelPermissionGroup, selected: boolean) => {
+  if (isAdminRole.value) return
   const groupUIDs = group.models.map((model) => model.uid)
   const next = new Set(selectedModelUIDs.value)
   groupUIDs.forEach((uid) => (selected ? next.add(uid) : next.delete(uid)))
@@ -253,13 +256,11 @@ const toggleModelGroup = (group: ModelPermissionGroup, selected: boolean) => {
 }
 
 const toggleAllModels = () => {
+  if (isAdminRole.value) return
   selectedModelUIDs.value = areAllModelsSelected.value ? [] : [...allModelUIDs.value]
 }
 
-const getDeniedModelUIDs = () => {
-  const selected = new Set(selectedModelUIDs.value)
-  return allModelUIDs.value.filter((uid) => !selected.has(uid))
-}
+const getAllowedModelUIDs = () => (isAdminRole.value ? [...allModelUIDs.value] : [...selectedModelUIDs.value])
 
 // 菜单类型处理方法
 const getMenuTypeText = (type: number) => {
@@ -304,8 +305,10 @@ const loadMenusData = async (roleCode?: string) => {
       menuTreeData.value = data.menus || []
       checkedKeys.value = data.authz_ids || []
       modelGroups.value = data.model_groups || []
-      const deniedModelUIDs = new Set(data.denied_model_uids || [])
-      selectedModelUIDs.value = allModelUIDs.value.filter((uid) => !deniedModelUIDs.has(uid))
+      const allowedModelUIDs = new Set(data.allowed_model_uids || [])
+      selectedModelUIDs.value = isAdminRole.value
+        ? [...allModelUIDs.value]
+        : allModelUIDs.value.filter((uid) => allowedModelUIDs.has(uid))
 
       // 树数据加载完成后，同步 checkedKeys 状态
       setTimeout(() => {
@@ -582,13 +585,13 @@ const handleCancel = () => {
 // 确认时返回菜单数据
 const handleConfirm = () => {
   const selectedMenus = getSelectedMenus()
-  emits("confirm", selectedMenus, getDeniedModelUIDs())
+  emits("confirm", selectedMenus, getAllowedModelUIDs())
 }
 
 // 提交权限（保留原有功能）
 const submitAddPermission = async (roleCode: string) => {
   try {
-    const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode, getDeniedModelUIDs())
+    const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode, getAllowedModelUIDs())
     if (data) {
       ElMessage.success("权限更新成功")
       return true

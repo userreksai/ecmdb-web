@@ -25,6 +25,8 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url))
 export default ({ mode }: ConfigEnv): UserConfigExport => {
   const viteEnv = loadEnv(mode, process.cwd()) as ImportMetaEnv
   const { VITE_PUBLIC_PATH } = viteEnv
+  const isDevelopment = mode === "development"
+  const enableCompression = viteEnv.VITE_BUILD_COMPRESSION === "true"
   return {
     /** 打包时根据实际情况修改 base */
     base: VITE_PUBLIC_PATH,
@@ -49,11 +51,12 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
       // vueDevTools(),
       vueJsx(),
       //  压缩
-      compression({
-        algorithm: "brotliCompress",
-        ext: ".br",
-        deleteOriginFile: false
-      }),
+      enableCompression &&
+        compression({
+          algorithm: "brotliCompress",
+          ext: ".br",
+          deleteOriginFile: false
+        }),
       // 支持将 SVG 文件导入为 Vue 组件
       svgLoader({
         defaultImport: "url",
@@ -80,7 +83,7 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
       SvgComponent({
         iconDir: [resolve(__dirname, "src/common/assets/icons")],
         preserveColor: resolve(__dirname, "src/common/assets/icons/preserve-color"),
-        dts: true,
+        dts: isDevelopment,
         dtsDir: resolve(__dirname, "types/auto")
       }),
       // 原子化 CSS
@@ -88,12 +91,12 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
       // 自动按需导入 API
       AutoImport({
         imports: ["vue", "vue-router", "pinia"],
-        dts: "types/auto/auto-imports.d.ts",
+        dts: isDevelopment ? "types/auto/auto-imports.d.ts" : false,
         resolvers: [ElementPlusResolver()]
       }),
       // 自动按需导入组件
       Components({
-        dts: "types/auto/components.d.ts",
+        dts: isDevelopment ? "types/auto/components.d.ts" : false,
         resolvers: [ElementPlusResolver()]
       }),
       prismjs({
@@ -110,7 +113,7 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
         css: true
       }),
       // 为项目开启 MCP Server
-      VueMcp()
+      isDevelopment && VueMcp()
     ],
     /** 混淆器 */
     esbuild:
@@ -130,9 +133,9 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
     },
     // CSS 相关配置
     css: {
-      devSourcemap: true,
+      devSourcemap: isDevelopment,
       // 线程中运行 CSS 预处理器
-      preprocessorMaxWorkers: true
+      preprocessorMaxWorkers: isDevelopment ? true : 1
     },
     server: {
       /** 设置 host: true 才可以使用 Network 的形式，以 IP 访问项目 */
@@ -178,6 +181,9 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
       }
     },
     build: {
+      /** Keep production builds within a predictable memory budget. */
+      sourcemap: false,
+      minify: "esbuild",
       /** 单个 chunk 文件的大小超过 2048KB 时发出警告 */
       chunkSizeWarningLimit: 2048,
       /** 禁用 gzip 压缩大小报告 */

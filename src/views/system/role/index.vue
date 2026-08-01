@@ -195,12 +195,12 @@ const handleUpdate = (row: role) => {
   })
 }
 
-const handleMenuPermissionConfirm = async (selectedMenus: any[], deniedModelUIDs: string[]) => {
+const handleMenuPermissionConfirm = async (selectedMenus: any[], allowedModelUIDs: string[]) => {
   try {
     console.log("确认分配菜单权限:", selectedMenus)
 
     const selectedMenuIds = selectedMenus.map((menu) => menu.id)
-    const { data } = await changeRoleMenuPermissionApi(selectedMenuIds, roleCode.value, deniedModelUIDs)
+    const { data } = await changeRoleMenuPermissionApi(selectedMenuIds, roleCode.value, allowedModelUIDs)
 
     if (data) {
       ElMessage.success("菜单权限分配成功")

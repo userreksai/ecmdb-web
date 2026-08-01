@@ -84,11 +84,11 @@
           <div class="model-section-header">
             <div>
               <h3>资产模型可见范围</h3>
-              <p>默认全部可见；取消模型后，该角色不能查看对应资产数据。</p>
+              <p>普通角色默认不可见，勾选后才可访问；admin 超级管理员始终可见全部模型。</p>
             </div>
             <div class="model-section-actions">
               <span>已选择 {{ selectedModelUIDs.length }} / {{ allModelUIDs.length }}</span>
-              <el-button @click="toggleAllModels">
+              <el-button :disabled="isAdminRole" @click="toggleAllModels">
                 {{ isAllModelsSelected ? "取消全选" : "全选模型" }}
               </el-button>
             </div>
@@ -100,6 +100,7 @@
                 <el-checkbox
                   :model-value="isModelGroupSelected(group)"
                   :indeterminate="isModelGroupIndeterminate(group)"
+                  :disabled="isAdminRole"
                   @change="(value) => toggleModelGroup(group, value as boolean)"
                 >
                   {{ group.group_name }}
@@ -110,6 +111,7 @@
                   v-for="model in group.models"
                   :key="model.uid"
                   :model-value="selectedModelUIDs.includes(model.uid)"
+                  :disabled="isAdminRole"
                   @change="(value) => toggleModel(model.uid, value as boolean)"
                 >
                   {{ model.name }}（{{ model.uid }}）
@@ -150,6 +152,7 @@ const {
   selectedPlatforms,
   modelGroups,
   selectedModelUIDs,
+  isAdminRole,
   allModelUIDs,
   loadPermissionData,
   handleCheck,

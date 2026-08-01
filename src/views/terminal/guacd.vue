@@ -5,7 +5,7 @@
 <script lang="ts" setup>
 import guacamole, { Mouse } from "guacamole-common-js"
 import { onMounted, ref } from "vue"
-import _ from "lodash"
+import { debounce } from "lodash-es"
 
 const guacamoleRef = ref<HTMLDivElement | null>(null)
 const guacamoleClient = ref()
@@ -62,7 +62,7 @@ const init = async () => {
   // 键盘事件
   const sink = new guacamole.InputSink()
   guacamoleRef.value?.appendChild(sink.getElement())
-  const sinkFocus = _.debounce(() => {
+  const sinkFocus = debounce(() => {
     sink.focus()
   })
 

@@ -8,7 +8,7 @@ import { onDeactivated, onMounted, ref } from "vue"
 import "@xterm/xterm/css/xterm.css"
 import { ITerminalInitOnlyOptions, ITerminalOptions, Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
-import _ from "lodash"
+import { debounce } from "lodash-es"
 import { ElMessage } from "element-plus"
 import type { PrefixConfig } from "./utils/prefix-config"
 
@@ -74,7 +74,7 @@ const initXterm = () => {
   })
 
   // resize
-  const resize = _.debounce(() => {
+  const resize = debounce(() => {
     resizeTerminal()
   })
   window.addEventListener("resize", resize)

@@ -81,8 +81,8 @@
     <!-- 菜单权限分配对话框 -->
     <FormDialog
       v-model="dialogPermission"
-      title="菜单权限分配"
-      subtitle="为角色分配相应的菜单访问权限"
+      title="角色权限分配"
+      subtitle="配置菜单权限与资产模型可见范围"
       header-icon="Menu"
       confirm-text="确认分配"
       :show-footer-info="false"
@@ -195,12 +195,12 @@ const handleUpdate = (row: role) => {
   })
 }
 
-const handleMenuPermissionConfirm = async (selectedMenus: any[]) => {
+const handleMenuPermissionConfirm = async (selectedMenus: any[], deniedModelUIDs: string[]) => {
   try {
     console.log("确认分配菜单权限:", selectedMenus)
 
     const selectedMenuIds = selectedMenus.map((menu) => menu.id)
-    const { data } = await changeRoleMenuPermissionApi(selectedMenuIds, roleCode.value)
+    const { data } = await changeRoleMenuPermissionApi(selectedMenuIds, roleCode.value, deniedModelUIDs)
 
     if (data) {
       ElMessage.success("菜单权限分配成功")

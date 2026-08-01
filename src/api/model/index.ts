@@ -20,9 +20,10 @@ export function CreateModelGroupApi(data: Model.CreateModelGroupReq) {
 }
 
 /** 获取模型列表，按照分组 */
-export function ListModelsByGroupApi() {
+export function ListModelsByGroupApi(applyModelPermission = false) {
   return instance.post<Model.listModelsResponseData>({
-    url: `${API_SERVICE.CMDB}/model/by_group`
+    url: `${API_SERVICE.CMDB}/model/by_group`,
+    data: { apply_model_permission: applyModelPermission }
   })
 }
 

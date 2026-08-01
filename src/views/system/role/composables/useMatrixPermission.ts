@@ -3,6 +3,7 @@ import type { menu } from "@/api/menu/types/menu"
 import { MenuType } from "@/api/menu/types/menu"
 import { getRolePermissionApi, changeRoleMenuPermissionApi } from "@/api/permission"
 import { ElMessage } from "element-plus"
+import type { ModelPermissionGroup } from "@/api/permission/types/permission"
 
 /**
  * NOTE: 扁平化后的菜单项类型
@@ -103,6 +104,14 @@ export const useMatrixPermission = () => {
   const loading = ref(false)
   const saving = ref(false)
   const selectedPlatforms = ref<string[]>([])
+  const modelGroups = ref<ModelPermissionGroup[]>([])
+  const selectedModelUIDs = ref<string[]>([])
+
+  const allModelUIDs = computed(() => modelGroups.value.flatMap((group) => group.models.map((model) => model.uid)))
+  const deniedModelUIDs = computed(() => {
+    const selected = new Set(selectedModelUIDs.value)
+    return allModelUIDs.value.filter((uid) => !selected.has(uid))
+  })
 
   /**
    * NOTE: 扁平化菜单列表（应用平台过滤）
@@ -128,10 +137,15 @@ export const useMatrixPermission = () => {
       const { data } = await getRolePermissionApi(roleCode)
       menuTreeData.value = data.menus || []
       checkedKeys.value = data.authz_ids || []
+      modelGroups.value = data.model_groups || []
+      const denied = new Set(data.denied_model_uids || [])
+      selectedModelUIDs.value = allModelUIDs.value.filter((uid) => !denied.has(uid))
     } catch (error) {
       console.error("加载权限数据失败:", error)
       menuTreeData.value = []
       checkedKeys.value = []
+      modelGroups.value = []
+      selectedModelUIDs.value = []
     } finally {
       loading.value = false
     }
@@ -183,13 +197,31 @@ export const useMatrixPermission = () => {
     }
   }
 
+  const toggleModel = (modelUID: string, checked: boolean) => {
+    const next = new Set(selectedModelUIDs.value)
+    checked ? next.add(modelUID) : next.delete(modelUID)
+    selectedModelUIDs.value = Array.from(next)
+  }
+
+  const toggleModelGroup = (group: ModelPermissionGroup, checked: boolean) => {
+    const next = new Set(selectedModelUIDs.value)
+    group.models.forEach((model) => (checked ? next.add(model.uid) : next.delete(model.uid)))
+    selectedModelUIDs.value = Array.from(next)
+  }
+
+  const toggleAllModels = () => {
+    const allSelected =
+      allModelUIDs.value.length > 0 && allModelUIDs.value.every((uid) => selectedModelUIDs.value.includes(uid))
+    selectedModelUIDs.value = allSelected ? [] : [...allModelUIDs.value]
+  }
+
   /**
    * 保存权限配置
    */
   const savePermission = async (roleCode: string) => {
     saving.value = true
     try {
-      const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode)
+      const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode, deniedModelUIDs.value)
       if (data) {
         ElMessage.success("权限保存成功")
         return true
@@ -217,10 +249,16 @@ export const useMatrixPermission = () => {
     loading,
     saving,
     selectedPlatforms,
+    modelGroups,
+    selectedModelUIDs,
+    allModelUIDs,
     flatMenuList,
     loadPermissionData,
     handleCheck,
     toggleSelectAll,
+    toggleModel,
+    toggleModelGroup,
+    toggleAllModels,
     savePermission,
     resetPermission
   }

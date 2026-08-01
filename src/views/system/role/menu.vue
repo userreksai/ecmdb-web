@@ -1,108 +1,69 @@
 <template>
   <div class="permission-manager">
-    <!-- 搜索栏 -->
-    <div class="search-section">
-      <div class="search-container">
-        <el-input
-          v-model="filterInput"
-          size="large"
-          placeholder="搜索菜单名称或路径..."
-          :prefix-icon="Search"
-          class="search-input"
-          clearable
-        />
-        <div class="search-actions">
-          <el-button @click="toggleExpandAll" class="action-btn" :class="{ active: isAllExpanded }">
-            <el-icon><ArrowDown v-if="isAllExpanded" /><ArrowUp v-else /></el-icon>
-            {{ isAllExpanded ? "收起全部" : "展开全部" }}
-          </el-button>
-          <el-button @click="toggleSelectAll" class="action-btn" :class="{ active: isAllSelected }">
-            <el-icon><Check v-if="isAllSelected" /><Close v-else /></el-icon>
-            {{ isAllSelected ? "取消全选" : "全选全部" }}
-          </el-button>
-        </div>
-      </div>
+    <div class="permission-mode-switch">
+      <el-radio-group v-model="activePermissionTab">
+        <el-radio-button value="menu">菜单权限</el-radio-button>
+        <el-radio-button value="model">模型可见范围</el-radio-button>
+      </el-radio-group>
+      <span class="mode-tip">模型默认全部可见，取消勾选后该角色将无法访问对应资产数据</span>
     </div>
 
-    <!-- 主要内容区域 -->
-    <div class="content-section">
-      <!-- 左侧：菜单树 -->
-      <div class="menu-tree-panel">
-        <div class="panel-header">
-          <div class="header-info">
-            <el-icon class="header-icon"><Menu /></el-icon>
-            <div class="header-text">
-              <h3>菜单列表</h3>
-              <span>选择需要分配的菜单权限</span>
-            </div>
+    <div v-show="activePermissionTab === 'menu'" class="menu-permission-content">
+      <!-- 搜索栏 -->
+      <div class="search-section">
+        <div class="search-container">
+          <el-input
+            v-model="filterInput"
+            size="large"
+            placeholder="搜索菜单名称或路径..."
+            :prefix-icon="Search"
+            class="search-input"
+            clearable
+          />
+          <div class="search-actions">
+            <el-button @click="toggleExpandAll" class="action-btn" :class="{ active: isAllExpanded }">
+              <el-icon><ArrowDown v-if="isAllExpanded" /><ArrowUp v-else /></el-icon>
+              {{ isAllExpanded ? "收起全部" : "展开全部" }}
+            </el-button>
+            <el-button @click="toggleSelectAll" class="action-btn" :class="{ active: isAllSelected }">
+              <el-icon><Check v-if="isAllSelected" /><Close v-else /></el-icon>
+              {{ isAllSelected ? "取消全选" : "全选全部" }}
+            </el-button>
           </div>
-          <div class="header-badge">
-            <span class="badge-text">已选 {{ checkedKeys.length }} 项</span>
-          </div>
-        </div>
-
-        <div class="tree-container">
-          <el-tree
-            ref="treeRef"
-            :data="menuTreeData"
-            show-checkbox
-            check-strictly
-            default-expand-all
-            node-key="id"
-            :highlight-current="true"
-            :default-checked-keys="checkedKeys"
-            :props="defaultProps"
-            :filter-node-method="filterNode"
-            class="menu-tree"
-            @check="handleCheck"
-          >
-            <template #default="{ data }">
-              <div class="tree-node">
-                <div class="node-content">
-                  <el-icon class="node-icon">
-                    <Menu />
-                  </el-icon>
-                  <div class="node-title">{{ data.meta?.title || data.name || "" }}</div>
-                  <el-tag :type="getMenuTypeTagType(data.type)" size="small" class="menu-type-tag">
-                    {{ getMenuTypeText(data.type) }}
-                  </el-tag>
-                </div>
-              </div>
-            </template>
-          </el-tree>
         </div>
       </div>
 
-      <!-- 右侧：已选择菜单 -->
-      <div class="selected-panel">
-        <div class="panel-header">
-          <div class="header-info">
-            <el-icon class="header-icon"><Check /></el-icon>
-            <div class="header-text">
-              <h3>已选择菜单</h3>
-              <span>当前已选择的菜单权限</span>
+      <!-- 主要内容区域 -->
+      <div class="content-section">
+        <!-- 左侧：菜单树 -->
+        <div class="menu-tree-panel">
+          <div class="panel-header">
+            <div class="header-info">
+              <el-icon class="header-icon"><Menu /></el-icon>
+              <div class="header-text">
+                <h3>菜单列表</h3>
+                <span>选择需要分配的菜单权限</span>
+              </div>
+            </div>
+            <div class="header-badge">
+              <span class="badge-text">已选 {{ checkedKeys.length }} 项</span>
             </div>
           </div>
-          <div class="header-badge">
-            <span class="badge-text">{{ selectedMenusCount }} 项</span>
-          </div>
-        </div>
 
-        <div class="selected-container">
-          <div v-if="selectedMenusCount === 0" class="empty-state">
-            <el-icon class="empty-icon"><DocumentRemove /></el-icon>
-            <p class="empty-text">暂无选择的菜单</p>
-            <p class="empty-hint">请在左侧选择需要分配的菜单权限</p>
-          </div>
-          <div v-else class="selected-tree-container">
+          <div class="tree-container">
             <el-tree
-              ref="selectedTreeRef"
-              :data="getSelectedMenuTree()"
+              ref="treeRef"
+              :data="menuTreeData"
+              show-checkbox
+              check-strictly
+              default-expand-all
+              node-key="id"
+              :highlight-current="true"
+              :default-checked-keys="checkedKeys"
               :props="defaultProps"
-              :expand-on-click-node="false"
-              :check-on-click-node="false"
-              :default-expand-all="true"
-              class="selected-menu-tree"
+              :filter-node-method="filterNode"
+              class="menu-tree"
+              @check="handleCheck"
             >
               <template #default="{ data }">
                 <div class="tree-node">
@@ -115,14 +76,101 @@
                       {{ getMenuTypeText(data.type) }}
                     </el-tag>
                   </div>
-                  <button class="remove-btn" @click="removeMenu(data)" title="移除">
-                    <el-icon><Close /></el-icon>
-                  </button>
                 </div>
               </template>
             </el-tree>
           </div>
         </div>
+
+        <!-- 右侧：已选择菜单 -->
+        <div class="selected-panel">
+          <div class="panel-header">
+            <div class="header-info">
+              <el-icon class="header-icon"><Check /></el-icon>
+              <div class="header-text">
+                <h3>已选择菜单</h3>
+                <span>当前已选择的菜单权限</span>
+              </div>
+            </div>
+            <div class="header-badge">
+              <span class="badge-text">{{ selectedMenusCount }} 项</span>
+            </div>
+          </div>
+
+          <div class="selected-container">
+            <div v-if="selectedMenusCount === 0" class="empty-state">
+              <el-icon class="empty-icon"><DocumentRemove /></el-icon>
+              <p class="empty-text">暂无选择的菜单</p>
+              <p class="empty-hint">请在左侧选择需要分配的菜单权限</p>
+            </div>
+            <div v-else class="selected-tree-container">
+              <el-tree
+                ref="selectedTreeRef"
+                :data="getSelectedMenuTree()"
+                :props="defaultProps"
+                :expand-on-click-node="false"
+                :check-on-click-node="false"
+                :default-expand-all="true"
+                class="selected-menu-tree"
+              >
+                <template #default="{ data }">
+                  <div class="tree-node">
+                    <div class="node-content">
+                      <el-icon class="node-icon">
+                        <Menu />
+                      </el-icon>
+                      <div class="node-title">{{ data.meta?.title || data.name || "" }}</div>
+                      <el-tag :type="getMenuTypeTagType(data.type)" size="small" class="menu-type-tag">
+                        {{ getMenuTypeText(data.type) }}
+                      </el-tag>
+                    </div>
+                    <button class="remove-btn" @click="removeMenu(data)" title="移除">
+                      <el-icon><Close /></el-icon>
+                    </button>
+                  </div>
+                </template>
+              </el-tree>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-show="activePermissionTab === 'model'" class="model-permission-content">
+      <div class="model-toolbar">
+        <el-input
+          v-model="modelFilter"
+          :prefix-icon="Search"
+          placeholder="搜索模型名称或标识..."
+          clearable
+          class="model-search"
+        />
+        <span class="model-summary">已选择 {{ selectedModelUIDs.length }} / {{ allModelUIDs.length }} 个模型</span>
+        <el-button @click="toggleAllModels">
+          {{ areAllModelsSelected ? "取消全选" : "全选模型" }}
+        </el-button>
+      </div>
+
+      <div class="model-groups">
+        <el-empty v-if="filteredModelGroups.length === 0" description="暂无匹配模型" />
+        <section v-for="group in filteredModelGroups" :key="group.group_id" class="model-group-card">
+          <div class="model-group-header">
+            <el-checkbox
+              :model-value="isModelGroupSelected(group)"
+              :indeterminate="isModelGroupIndeterminate(group)"
+              @change="(value) => toggleModelGroup(group, value as boolean)"
+            >
+              {{ group.group_name }}
+            </el-checkbox>
+            <span>{{ selectedCountInGroup(group) }} / {{ group.models.length }}</span>
+          </div>
+          <el-checkbox-group v-model="selectedModelUIDs" class="model-checkbox-grid">
+            <el-checkbox v-for="model in group.models" :key="model.uid" :value="model.uid" border>
+              <span class="model-option-name">{{ model.name }}</span>
+              <span class="model-option-uid">{{ model.uid }}</span>
+            </el-checkbox>
+          </el-checkbox-group>
+        </section>
       </div>
     </div>
   </div>
@@ -134,7 +182,7 @@ import { Search, Close, Menu, Check, ArrowDown, ArrowUp, DocumentRemove } from "
 import { ElTree } from "element-plus"
 import type { menu } from "@/api/menu/types/menu"
 import { changeRoleMenuPermissionApi, getRolePermissionApi } from "@/api/permission"
-import { rolePermission } from "@/api/permission/types/permission"
+import type { ModelPermissionGroup, rolePermission } from "@/api/permission/types/permission"
 import { ElMessage } from "element-plus"
 
 interface Props {
@@ -143,7 +191,7 @@ interface Props {
 }
 
 interface Emits {
-  (e: "confirm", menus: Array<{ id: number; name: string; path: string; meta: any }>): void
+  (e: "confirm", menus: Array<{ id: number; name: string; path: string; meta: any }>, deniedModelUIDs: string[]): void
   (e: "cancel"): void
 }
 
@@ -158,6 +206,10 @@ const checkedKeys = ref<number[]>([]) // 已选择的菜单ID
 const menuPermissionData = ref<rolePermission>()
 const treeRef = ref<InstanceType<typeof ElTree>>()
 const selectedTreeRef = ref<InstanceType<typeof ElTree>>()
+const activePermissionTab = ref<"menu" | "model">("menu")
+const modelFilter = ref("")
+const modelGroups = ref<ModelPermissionGroup[]>([])
+const selectedModelUIDs = ref<string[]>([])
 
 // 按钮状态
 const isAllExpanded = ref(true) // 是否全部展开
@@ -165,6 +217,49 @@ const isAllSelected = ref(false) // 是否全部选中
 
 // 计算属性
 const selectedMenusCount = computed(() => getSelectedMenus().length)
+const allModelUIDs = computed(() => modelGroups.value.flatMap((group) => group.models.map((model) => model.uid)))
+const areAllModelsSelected = computed(
+  () => allModelUIDs.value.length > 0 && allModelUIDs.value.every((uid) => selectedModelUIDs.value.includes(uid))
+)
+const filteredModelGroups = computed(() => {
+  const keyword = modelFilter.value.trim().toLowerCase()
+  if (!keyword) return modelGroups.value
+  return modelGroups.value
+    .map((group) => ({
+      ...group,
+      models: group.models.filter(
+        (model) => model.name.toLowerCase().includes(keyword) || model.uid.toLowerCase().includes(keyword)
+      )
+    }))
+    .filter((group) => group.models.length > 0)
+})
+
+const selectedCountInGroup = (group: ModelPermissionGroup) =>
+  group.models.filter((model) => selectedModelUIDs.value.includes(model.uid)).length
+
+const isModelGroupSelected = (group: ModelPermissionGroup) =>
+  group.models.length > 0 && selectedCountInGroup(group) === group.models.length
+
+const isModelGroupIndeterminate = (group: ModelPermissionGroup) => {
+  const count = selectedCountInGroup(group)
+  return count > 0 && count < group.models.length
+}
+
+const toggleModelGroup = (group: ModelPermissionGroup, selected: boolean) => {
+  const groupUIDs = group.models.map((model) => model.uid)
+  const next = new Set(selectedModelUIDs.value)
+  groupUIDs.forEach((uid) => (selected ? next.add(uid) : next.delete(uid)))
+  selectedModelUIDs.value = Array.from(next)
+}
+
+const toggleAllModels = () => {
+  selectedModelUIDs.value = areAllModelsSelected.value ? [] : [...allModelUIDs.value]
+}
+
+const getDeniedModelUIDs = () => {
+  const selected = new Set(selectedModelUIDs.value)
+  return allModelUIDs.value.filter((uid) => !selected.has(uid))
+}
 
 // 菜单类型处理方法
 const getMenuTypeText = (type: number) => {
@@ -208,6 +303,9 @@ const loadMenusData = async (roleCode?: string) => {
       menuPermissionData.value = data
       menuTreeData.value = data.menus || []
       checkedKeys.value = data.authz_ids || []
+      modelGroups.value = data.model_groups || []
+      const deniedModelUIDs = new Set(data.denied_model_uids || [])
+      selectedModelUIDs.value = allModelUIDs.value.filter((uid) => !deniedModelUIDs.has(uid))
 
       // 树数据加载完成后，同步 checkedKeys 状态
       setTimeout(() => {
@@ -237,6 +335,8 @@ const loadMenusData = async (roleCode?: string) => {
     menuTreeData.value = []
     selectedMenuTreeData.value = []
     checkedKeys.value = []
+    modelGroups.value = []
+    selectedModelUIDs.value = []
   }
 }
 
@@ -482,13 +582,13 @@ const handleCancel = () => {
 // 确认时返回菜单数据
 const handleConfirm = () => {
   const selectedMenus = getSelectedMenus()
-  emits("confirm", selectedMenus)
+  emits("confirm", selectedMenus, getDeniedModelUIDs())
 }
 
 // 提交权限（保留原有功能）
 const submitAddPermission = async (roleCode: string) => {
   try {
-    const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode)
+    const { data } = await changeRoleMenuPermissionApi(checkedKeys.value, roleCode, getDeniedModelUIDs())
     if (data) {
       ElMessage.success("权限更新成功")
       return true
@@ -527,6 +627,124 @@ defineExpose({
   overflow: hidden;
   margin: 0;
   padding: 0;
+}
+
+.permission-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+
+  .mode-tip {
+    color: #64748b;
+    font-size: 12px;
+  }
+}
+
+.menu-permission-content,
+.model-permission-content {
+  flex: 1;
+  min-height: 0;
+  padding-top: 12px;
+}
+
+.menu-permission-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.model-permission-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.model-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+
+  .model-search {
+    flex: 1;
+  }
+
+  .model-summary {
+    color: #475569;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+}
+
+.model-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+}
+
+.model-group-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.model-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+
+  > span {
+    color: #64748b;
+    font-size: 12px;
+  }
+}
+
+.model-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+
+  :deep(.el-checkbox) {
+    width: 100%;
+    margin: 0;
+    min-width: 0;
+  }
+
+  :deep(.el-checkbox__label) {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.3;
+  }
+}
+
+.model-option-name,
+.model-option-uid {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-option-uid {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .model-groups {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 搜索栏 */

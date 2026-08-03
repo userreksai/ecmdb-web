@@ -132,6 +132,19 @@
             <strong>{{ selectedResourceIds.length }}</strong>
             条
           </span>
+          <el-tag v-if="allMatchingResourcesSelected" type="success" effect="light" round>
+            已选择全部 {{ paginationData.total }} 条结果
+          </el-tag>
+          <el-button
+            v-else-if="paginationData.total > selectedResourceIds.length"
+            link
+            type="primary"
+            :loading="selectingAllResources"
+            :disabled="loading"
+            @click="selectAllMatchingResources"
+          >
+            选择全部 {{ paginationData.total }} 条
+          </el-button>
           <el-button v-if="selectedResourceIds.length > 0" link type="primary" @click="clearResourceSelection">
             清空
           </el-button>
@@ -313,6 +326,7 @@ const displayFileds = ref<Attribute[]>([])
 const drawerVisible = ref<boolean>(false)
 const loading = ref(false)
 const searchKeyword = ref("")
+const activeSearchKeyword = ref("")
 
 const title = ref<string>("")
 
@@ -365,20 +379,73 @@ const exportFields = computed(() => {
     }))
 })
 
-// 已选数据
-const selectedResources = ref<Resource[]>([])
-const selectedResourceIds = computed(() => selectedResources.value.map((r) => r.id))
+// 跨页保存已选 ID，避免服务端分页时切页丢失勾选状态
+const selectedResourceIdSet = ref<Set<number>>(new Set())
+const selectedResourceIds = computed(() => Array.from(selectedResourceIdSet.value))
+const selectingAllResources = ref(false)
+const syncingTableSelection = ref(false)
+const allMatchingResourcesSelected = computed(
+  () => paginationData.total > 0 && selectedResourceIds.value.length === paginationData.total
+)
 // 当前页数据 ID 列表
 const currentResourceIds = computed(() => resourcesData.value.map((r) => r.id))
 
 // 处理选择变化
 const handleSelectionChange = (selection: Resource[]) => {
-  selectedResources.value = selection
+  if (syncingTableSelection.value) return
+
+  const nextSelectedIds = new Set(selectedResourceIdSet.value)
+  resourcesData.value.forEach((resource) => nextSelectedIds.delete(resource.id))
+  selection.forEach((resource) => nextSelectedIds.add(resource.id))
+  selectedResourceIdSet.value = nextSelectedIds
+}
+
+const syncCurrentPageSelection = async () => {
+  await nextTick()
+  syncingTableSelection.value = true
+  dataTableRef.value?.setSelection(
+    resourcesData.value.filter((resource) => selectedResourceIdSet.value.has(resource.id))
+  )
+  await nextTick()
+  syncingTableSelection.value = false
 }
 
 const clearResourceSelection = () => {
+  selectedResourceIdSet.value = new Set()
   dataTableRef.value?.clearSelection()
-  selectedResources.value = []
+}
+
+const selectAllMatchingResources = async () => {
+  if (!modelUid.value || paginationData.total === 0 || selectingAllResources.value) return
+
+  selectingAllResources.value = true
+  const params = {
+    model_uid: modelUid.value,
+    offset: 0,
+    limit: paginationData.total
+  }
+
+  try {
+    const { data } = activeSearchKeyword.value
+      ? await searchModelResourceApi({ ...params, keyword: activeSearchKeyword.value })
+      : await listResourceApi(params)
+    const allResources = data.resources || []
+    selectedResourceIdSet.value = new Set(allResources.map((resource) => resource.id))
+    await syncCurrentPageSelection()
+
+    if (selectedResourceIds.value.length === paginationData.total) {
+      ElMessage.success(`已选择全部 ${paginationData.total} 条结果`)
+    } else {
+      ElMessage.warning(
+        `应选择 ${paginationData.total} 条，实际获取到 ${selectedResourceIds.value.length} 条，请刷新后重试`
+      )
+    }
+  } catch (error) {
+    ElMessage.error("选择全部结果失败")
+    console.error("select all matching resources failed:", error)
+  } finally {
+    selectingAllResources.value = false
+  }
 }
 
 const batchDialogVisible = ref(false)
@@ -419,7 +486,7 @@ const batchFormRules: FormRules = {
 }
 
 const handleShowBatchUpdate = () => {
-  if (selectedResources.value.length === 0) {
+  if (selectedResourceIds.value.length === 0) {
     ElMessage.warning("请先选择要修改的数据")
     return
   }
@@ -442,26 +509,26 @@ const handleBatchDialogClosed = () => {
   batchProgressTotal.value = 0
 }
 
-const updateResourcesWithConcurrency = async (resources: Resource[], fieldUid: string, value: any) => {
-  const failedResources: Resource[] = []
+const updateResourcesWithConcurrency = async (resourceIds: number[], fieldUid: string, value: any) => {
+  const failedResourceIds: number[] = []
   let nextIndex = 0
-  const workerCount = Math.min(5, resources.length)
+  const workerCount = Math.min(5, resourceIds.length)
 
   const worker = async () => {
-    while (nextIndex < resources.length) {
+    while (nextIndex < resourceIds.length) {
       const currentIndex = nextIndex
       nextIndex += 1
-      const resource = resources[currentIndex]
+      const resourceId = resourceIds[currentIndex]
 
       try {
         await setCustomFieldApi({
-          id: resource.id,
+          id: resourceId,
           field: fieldUid,
           data: value
         })
       } catch (error) {
-        failedResources.push(resource)
-        console.error(`batch update resource ${resource.id} failed:`, error)
+        failedResourceIds.push(resourceId)
+        console.error(`batch update resource ${resourceId} failed:`, error)
       } finally {
         batchProgressCompleted.value += 1
       }
@@ -469,7 +536,7 @@ const updateResourcesWithConcurrency = async (resources: Resource[], fieldUid: s
   }
 
   await Promise.all(Array.from({ length: workerCount }, () => worker()))
-  return failedResources
+  return failedResourceIds
 }
 
 const handleBatchUpdate = async () => {
@@ -487,12 +554,12 @@ const handleBatchUpdate = async () => {
     return
   }
 
-  const resources = [...selectedResources.value]
+  const resourceIds = [...selectedResourceIds.value]
   const value = typeof batchForm.value.value === "string" ? batchForm.value.value.trim() : batchForm.value.value
 
   try {
     await ElMessageBox.confirm(
-      `确认将 ${resources.length} 条数据的“${field.field_name}”修改为“${String(value)}”？`,
+      `确认将 ${resourceIds.length} 条数据的“${field.field_name}”修改为“${String(value)}”？`,
       "批量修改确认",
       {
         confirmButtonText: "确认修改",
@@ -506,20 +573,22 @@ const handleBatchUpdate = async () => {
 
   batchSubmitting.value = true
   batchProgressCompleted.value = 0
-  batchProgressTotal.value = resources.length
+  batchProgressTotal.value = resourceIds.length
 
   try {
-    const failedResources = await updateResourcesWithConcurrency(resources, field.field_uid, value)
-    const successCount = resources.length - failedResources.length
+    const failedResourceIds = await updateResourcesWithConcurrency(resourceIds, field.field_uid, value)
+    const successCount = resourceIds.length - failedResourceIds.length
 
     await listResourceByModelUid()
 
-    if (failedResources.length === 0) {
+    if (failedResourceIds.length === 0) {
       ElMessage.success(`批量修改完成，共成功修改 ${successCount} 条数据`)
       clearResourceSelection()
       batchDialogVisible.value = false
     } else {
-      ElMessage.warning(`批量修改部分完成：成功 ${successCount} 条，失败 ${failedResources.length} 条，可再次确认重试`)
+      ElMessage.warning(
+        `批量修改部分完成：成功 ${successCount} 条，失败 ${failedResourceIds.length} 条，可再次确认重试`
+      )
     }
   } finally {
     batchSubmitting.value = false
@@ -647,12 +716,13 @@ const listResourceByModelUid = async () => {
     offset: (paginationData.currentPage - 1) * paginationData.pageSize,
     limit: paginationData.pageSize
   }
-  const keyword = searchKeyword.value.trim()
+  const keyword = activeSearchKeyword.value
 
   try {
     const { data } = keyword ? await searchModelResourceApi({ ...params, keyword }) : await listResourceApi(params)
     resourcesData.value = data.resources || []
     paginationData.total = data.total || 0
+    await syncCurrentPageSelection()
   } catch (error) {
     resourcesData.value = []
     paginationData.total = 0
@@ -665,6 +735,7 @@ const listResourceByModelUid = async () => {
 
 const handleSearch = () => {
   clearResourceSelection()
+  activeSearchKeyword.value = searchKeyword.value.trim()
   if (paginationData.currentPage === 1) {
     listResourceByModelUid()
   } else {
@@ -775,6 +846,7 @@ watch(
     clearResourceSelection()
     resourcesData.value = []
     searchKeyword.value = ""
+    activeSearchKeyword.value = ""
     if (paginationData.currentPage === 1) {
       listResourceByModelUid()
     } else {
@@ -866,6 +938,7 @@ watch(
   .selection-summary {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 8px;
     color: #606266;
     font-size: 14px;

@@ -376,9 +376,18 @@ const clearSelection = () => {
   }
 }
 
+// 按当前页数据重新设置勾选状态，供服务端分页场景同步跨页选择结果
+const setSelection = (rows: any[]) => {
+  if (!tableRef.value) return
+
+  tableRef.value.clearSelection()
+  rows.forEach((row) => tableRef.value.toggleRowSelection(row, true))
+}
+
 // 暴露方法给父组件
 defineExpose({
   clearSelection,
+  setSelection,
   tableRef
 })
 </script>

@@ -9,6 +9,8 @@ export interface ListResourceReq {
 
 export interface SearchModelResourceReq extends ListResourceReq {
   keyword: string
+  /** 仅搜索指定模型字段；不传时搜索全部字段 */
+  field_uid?: string
 }
 
 export interface detailResource {

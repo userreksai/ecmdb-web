@@ -48,7 +48,7 @@
             v-model="searchKeyword"
             clearable
             class="resource-search"
-            :placeholder="searchFieldUid === ALL_SEARCH_FIELDS ? '搜索当前模型' : '输入字段值，留空查询空值'"
+            :placeholder="searchFieldUid === ALL_SEARCH_FIELDS ? '模糊搜索当前模型' : '精确值、>2、<2；留空查空值'"
             :prefix-icon="Search"
             @keyup.enter="handleSearch"
             @clear="handleSearch"

@@ -26,11 +26,29 @@
       <!-- 自定义操作按钮 -->
       <template #actions>
         <div class="header-actions-bar">
+          <el-select
+            v-model="searchFieldUid"
+            filterable
+            class="resource-search-field"
+            placeholder="选择搜索字段"
+            @keyup.enter="handleSearch"
+          >
+            <el-option label="全部字段" :value="ALL_SEARCH_FIELDS" />
+            <el-option
+              v-for="field in attributeFiledsData"
+              :key="field.field_uid"
+              :label="field.field_name || field.field_uid"
+              :value="field.field_uid"
+            >
+              <span>{{ field.field_name || field.field_uid }}</span>
+              <code class="search-field-uid">{{ field.field_uid }}</code>
+            </el-option>
+          </el-select>
           <el-input
             v-model="searchKeyword"
             clearable
             class="resource-search"
-            placeholder="搜索当前模型"
+            :placeholder="searchFieldUid === ALL_SEARCH_FIELDS ? '搜索当前模型' : '输入字段值，留空查询空值'"
             :prefix-icon="Search"
             @keyup.enter="handleSearch"
             @clear="handleSearch"
@@ -325,7 +343,10 @@ const attributeGroupsData = ref<any[]>([]) // 存储分组数据
 const displayFileds = ref<Attribute[]>([])
 const drawerVisible = ref<boolean>(false)
 const loading = ref(false)
+const ALL_SEARCH_FIELDS = "__all_fields__"
+const searchFieldUid = ref(ALL_SEARCH_FIELDS)
 const searchKeyword = ref("")
+const activeSearchFieldUid = ref("")
 const activeSearchKeyword = ref("")
 
 const title = ref<string>("")
@@ -426,8 +447,13 @@ const selectAllMatchingResources = async () => {
   }
 
   try {
-    const { data } = activeSearchKeyword.value
-      ? await searchModelResourceApi({ ...params, keyword: activeSearchKeyword.value })
+    const hasActiveSearch = Boolean(activeSearchFieldUid.value || activeSearchKeyword.value)
+    const { data } = hasActiveSearch
+      ? await searchModelResourceApi({
+          ...params,
+          keyword: activeSearchKeyword.value,
+          ...(activeSearchFieldUid.value ? { field_uid: activeSearchFieldUid.value } : {})
+        })
       : await listResourceApi(params)
     const allResources = data.resources || []
     selectedResourceIdSet.value = new Set(allResources.map((resource) => resource.id))
@@ -717,16 +743,20 @@ const listResourceByModelUid = async () => {
     limit: paginationData.pageSize
   }
   const keyword = activeSearchKeyword.value
+  const fieldUid = activeSearchFieldUid.value
+  const hasActiveSearch = Boolean(fieldUid || keyword)
 
   try {
-    const { data } = keyword ? await searchModelResourceApi({ ...params, keyword }) : await listResourceApi(params)
+    const { data } = hasActiveSearch
+      ? await searchModelResourceApi({ ...params, keyword, ...(fieldUid ? { field_uid: fieldUid } : {}) })
+      : await listResourceApi(params)
     resourcesData.value = data.resources || []
     paginationData.total = data.total || 0
     await syncCurrentPageSelection()
   } catch (error) {
     resourcesData.value = []
     paginationData.total = 0
-    ElMessage.error(keyword ? "搜索资源失败" : "获取资源列表失败")
+    ElMessage.error(hasActiveSearch ? "搜索资源失败" : "获取资源列表失败")
     console.error("fetch resources failed:", error)
   } finally {
     loading.value = false
@@ -735,6 +765,7 @@ const listResourceByModelUid = async () => {
 
 const handleSearch = () => {
   clearResourceSelection()
+  activeSearchFieldUid.value = searchFieldUid.value === ALL_SEARCH_FIELDS ? "" : searchFieldUid.value
   activeSearchKeyword.value = searchKeyword.value.trim()
   if (paginationData.currentPage === 1) {
     listResourceByModelUid()
@@ -845,7 +876,9 @@ watch(
   () => {
     clearResourceSelection()
     resourcesData.value = []
+    searchFieldUid.value = ALL_SEARCH_FIELDS
     searchKeyword.value = ""
+    activeSearchFieldUid.value = ""
     activeSearchKeyword.value = ""
     if (paginationData.currentPage === 1) {
       listResourceByModelUid()
@@ -932,7 +965,11 @@ watch(
   }
 
   .resource-search {
-    width: 260px;
+    width: 230px;
+  }
+
+  .resource-search-field {
+    width: 150px;
   }
 
   .selection-summary {
@@ -979,6 +1016,13 @@ watch(
   font-size: 12px;
 }
 
+.search-field-uid {
+  float: right;
+  margin-left: 16px;
+  color: #909399;
+  font-size: 12px;
+}
+
 .batch-progress {
   display: flex;
   flex-direction: column;
@@ -1005,6 +1049,10 @@ watch(
 
     .resource-search {
       width: min(100%, 320px);
+    }
+
+    .resource-search-field {
+      width: min(100%, 220px);
     }
   }
 }

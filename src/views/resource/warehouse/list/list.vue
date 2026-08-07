@@ -26,33 +26,54 @@
       <!-- 自定义操作按钮 -->
       <template #actions>
         <div class="header-actions-bar">
-          <el-select
-            v-model="searchFieldUid"
-            filterable
-            class="resource-search-field"
-            placeholder="选择搜索字段"
-            @keyup.enter="handleSearch"
-          >
-            <el-option label="全部字段" :value="ALL_SEARCH_FIELDS" />
-            <el-option
-              v-for="field in attributeFiledsData"
-              :key="field.field_uid"
-              :label="field.field_name || field.field_uid"
-              :value="field.field_uid"
-            >
-              <span>{{ field.field_name || field.field_uid }}</span>
-              <code class="search-field-uid">{{ field.field_uid }}</code>
-            </el-option>
-          </el-select>
-          <el-input
-            v-model="searchKeyword"
-            clearable
-            class="resource-search"
-            :placeholder="searchFieldUid === ALL_SEARCH_FIELDS ? '模糊搜索当前模型' : '精确值、>2、<2；留空查空值'"
-            :prefix-icon="Search"
-            @keyup.enter="handleSearch"
-            @clear="handleSearch"
-          />
+          <div class="resource-filter-list">
+            <div v-for="(condition, index) in searchConditions" :key="condition.id" class="resource-filter-row">
+              <el-select
+                v-model="condition.fieldUid"
+                filterable
+                class="resource-search-field"
+                placeholder="选择搜索字段"
+                @keyup.enter="handleSearch"
+              >
+                <el-option label="全部字段" :value="ALL_SEARCH_FIELDS" />
+                <el-option
+                  v-for="field in attributeFiledsData"
+                  :key="field.field_uid"
+                  :label="field.field_name || field.field_uid"
+                  :value="field.field_uid"
+                >
+                  <span>{{ field.field_name || field.field_uid }}</span>
+                  <code class="search-field-uid">{{ field.field_uid }}</code>
+                </el-option>
+              </el-select>
+              <el-button
+                v-if="index === 0"
+                :icon="Plus"
+                circle
+                class="resource-filter-action"
+                title="添加搜索条件"
+                @click="addSearchCondition"
+              />
+              <el-button
+                v-if="searchConditions.length > 1"
+                :icon="Minus"
+                circle
+                class="resource-filter-action"
+                title="删除此搜索条件"
+                @click="removeSearchCondition(condition.id)"
+              />
+              <el-input
+                v-model="condition.keyword"
+                clearable
+                class="resource-search"
+                :placeholder="
+                  condition.fieldUid === ALL_SEARCH_FIELDS ? '模糊搜索当前模型' : '精确值、>2、<2；留空查空值'
+                "
+                :prefix-icon="Search"
+                @keyup.enter="handleSearch"
+              />
+            </div>
+          </div>
           <el-button type="primary" :icon="Search" :loading="loading" class="action-btn" @click="handleSearch">
             查询
           </el-button>
@@ -306,7 +327,7 @@ import {
   findSecureData,
   setCustomFieldApi
 } from "@/api/resource"
-import { type Resource } from "@/api/resource/types/resource"
+import { type ModelResourceSearchCondition, type Resource } from "@/api/resource/types/resource"
 import {
   CirclePlus,
   Edit,
@@ -316,7 +337,9 @@ import {
   Download,
   Upload,
   RefreshRight,
-  Search
+  Search,
+  Plus,
+  Minus
 } from "@element-plus/icons-vue"
 import { usePagination } from "@/common/composables/usePagination"
 import ManagerHeader from "@@/components/ManagerHeader/index.vue"
@@ -344,10 +367,44 @@ const displayFileds = ref<Attribute[]>([])
 const drawerVisible = ref<boolean>(false)
 const loading = ref(false)
 const ALL_SEARCH_FIELDS = "__all_fields__"
-const searchFieldUid = ref(ALL_SEARCH_FIELDS)
-const searchKeyword = ref("")
-const activeSearchFieldUid = ref("")
-const activeSearchKeyword = ref("")
+interface SearchConditionRow {
+  id: number
+  fieldUid: string
+  keyword: string
+}
+
+let nextSearchConditionId = 1
+const createSearchCondition = (): SearchConditionRow => ({
+  id: nextSearchConditionId++,
+  fieldUid: ALL_SEARCH_FIELDS,
+  keyword: ""
+})
+const searchConditions = ref<SearchConditionRow[]>([createSearchCondition()])
+const activeSearchConditions = ref<ModelResourceSearchCondition[]>([])
+
+const addSearchCondition = () => {
+  searchConditions.value.push(createSearchCondition())
+}
+
+const removeSearchCondition = (id: number) => {
+  if (searchConditions.value.length === 1) return
+  searchConditions.value = searchConditions.value.filter((condition) => condition.id !== id)
+}
+
+const resetSearchConditions = () => {
+  searchConditions.value = [createSearchCondition()]
+  activeSearchConditions.value = []
+}
+
+const buildSearchRequest = <T extends { model_uid: string; offset: number; limit: number }>(params: T) => {
+  const firstCondition = activeSearchConditions.value[0]
+  return {
+    ...params,
+    keyword: firstCondition?.keyword || "",
+    ...(firstCondition?.field_uid ? { field_uid: firstCondition.field_uid } : {}),
+    conditions: activeSearchConditions.value
+  }
+}
 
 const title = ref<string>("")
 
@@ -447,13 +504,9 @@ const selectAllMatchingResources = async () => {
   }
 
   try {
-    const hasActiveSearch = Boolean(activeSearchFieldUid.value || activeSearchKeyword.value)
+    const hasActiveSearch = activeSearchConditions.value.length > 0
     const { data } = hasActiveSearch
-      ? await searchModelResourceApi({
-          ...params,
-          keyword: activeSearchKeyword.value,
-          ...(activeSearchFieldUid.value ? { field_uid: activeSearchFieldUid.value } : {})
-        })
+      ? await searchModelResourceApi(buildSearchRequest(params))
       : await listResourceApi(params)
     const allResources = data.resources || []
     selectedResourceIdSet.value = new Set(allResources.map((resource) => resource.id))
@@ -742,13 +795,11 @@ const listResourceByModelUid = async () => {
     offset: (paginationData.currentPage - 1) * paginationData.pageSize,
     limit: paginationData.pageSize
   }
-  const keyword = activeSearchKeyword.value
-  const fieldUid = activeSearchFieldUid.value
-  const hasActiveSearch = Boolean(fieldUid || keyword)
+  const hasActiveSearch = activeSearchConditions.value.length > 0
 
   try {
     const { data } = hasActiveSearch
-      ? await searchModelResourceApi({ ...params, keyword, ...(fieldUid ? { field_uid: fieldUid } : {}) })
+      ? await searchModelResourceApi(buildSearchRequest(params))
       : await listResourceApi(params)
     resourcesData.value = data.resources || []
     paginationData.total = data.total || 0
@@ -765,8 +816,12 @@ const listResourceByModelUid = async () => {
 
 const handleSearch = () => {
   clearResourceSelection()
-  activeSearchFieldUid.value = searchFieldUid.value === ALL_SEARCH_FIELDS ? "" : searchFieldUid.value
-  activeSearchKeyword.value = searchKeyword.value.trim()
+  activeSearchConditions.value = searchConditions.value
+    .map((condition) => ({
+      keyword: condition.keyword.trim(),
+      ...(condition.fieldUid === ALL_SEARCH_FIELDS ? {} : { field_uid: condition.fieldUid })
+    }))
+    .filter((condition) => Boolean(condition.field_uid || condition.keyword))
   if (paginationData.currentPage === 1) {
     listResourceByModelUid()
   } else {
@@ -876,10 +931,7 @@ watch(
   () => {
     clearResourceSelection()
     resourcesData.value = []
-    searchFieldUid.value = ALL_SEARCH_FIELDS
-    searchKeyword.value = ""
-    activeSearchFieldUid.value = ""
-    activeSearchKeyword.value = ""
+    resetSearchConditions()
     if (paginationData.currentPage === 1) {
       listResourceByModelUid()
     } else {
@@ -958,10 +1010,27 @@ watch(
 
   .header-actions-bar {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: flex-end;
     flex-wrap: wrap;
     gap: 8px;
+  }
+
+  .resource-filter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .resource-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .resource-filter-action {
+    flex: none;
+    margin-left: 0;
   }
 
   .resource-search {
@@ -1053,6 +1122,10 @@ watch(
 
     .resource-search-field {
       width: min(100%, 220px);
+    }
+
+    .resource-filter-row {
+      flex-wrap: wrap;
     }
   }
 }

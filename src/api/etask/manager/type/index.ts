@@ -90,6 +90,8 @@ export interface ListExecutionResp {
 
 export interface TaskItem extends CreateTaskReq {
   id: number
+  category_id: number
+  category_name: string
   status: TaskStatus
   next_time: number
   ctime: number
@@ -105,4 +107,32 @@ export interface PageQuery {
   offset: number
   limit: number
   query?: string
+  category_id?: number
+}
+
+export interface TaskCategory {
+  id: number
+  name: string
+  description: string
+  task_count: number
+  ctime: number
+  utime: number
+}
+
+export interface TaskCategoryList {
+  categories: TaskCategory[]
+  uncategorized_count: number
+}
+
+export interface CreateTaskCategoryReq {
+  name: string
+  description?: string
+}
+
+export interface UpdateTaskCategoryReq extends CreateTaskCategoryReq {
+  id: number
+}
+
+export interface ReplaceCategoryTasksReq {
+  task_ids: number[]
 }

@@ -7,10 +7,19 @@ export interface ListResourceReq {
   fields?: string[]
 }
 
-export interface SearchModelResourceReq extends ListResourceReq {
+export interface ModelResourceSearchCondition {
   keyword: string
   /** 仅搜索指定模型字段；不传时搜索全部字段 */
   field_uid?: string
+}
+
+export interface SearchModelResourceReq extends ListResourceReq {
+  /** 保留首个条件，兼容旧版后端 */
+  keyword: string
+  /** 保留首个条件，兼容旧版后端 */
+  field_uid?: string
+  /** 多个搜索条件按 AND 组合 */
+  conditions?: ModelResourceSearchCondition[]
 }
 
 export interface detailResource {

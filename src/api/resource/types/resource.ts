@@ -7,10 +7,14 @@ export interface ListResourceReq {
   fields?: string[]
 }
 
+export type ModelResourceSearchMatchType = "exact" | "fuzzy"
+
 export interface ModelResourceSearchCondition {
   keyword: string
   /** 仅搜索指定模型字段；不传时搜索全部字段 */
   field_uid?: string
+  /** 精准匹配或模糊匹配；不传时沿用旧版默认行为 */
+  match_type?: ModelResourceSearchMatchType
 }
 
 export interface SearchModelResourceReq extends ListResourceReq {
@@ -18,6 +22,8 @@ export interface SearchModelResourceReq extends ListResourceReq {
   keyword: string
   /** 保留首个条件，兼容旧版后端 */
   field_uid?: string
+  /** 保留首个条件的匹配方式，兼容单条件请求 */
+  match_type?: ModelResourceSearchMatchType
   /** 多个搜索条件按 AND 组合 */
   conditions?: ModelResourceSearchCondition[]
 }

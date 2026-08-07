@@ -1,11 +1,7 @@
 <template>
   <PageContainer>
     <!-- 头部区域: 遵循标准 Search-in-Actions 模式 -->
-    <ManagerHeader
-      title="调度任务管理"
-      subtitle="集中化配置与监控分布式的定时/单次触发业务任务"
-      @refresh="fetchTasksData"
-    >
+    <ManagerHeader title="调度任务管理" subtitle="集中化配置与监控分布式的定时/单次触发业务任务" @refresh="refreshAll">
       <template #actions>
         <div class="header-actions-bar">
           <el-input
@@ -13,8 +9,8 @@
             placeholder="搜索任务名称..."
             class="search-input premium-input"
             clearable
-            @clear="fetchTasksData"
-            @keyup.enter="fetchTasksData"
+            @clear="handleSearch"
+            @keyup.enter="handleSearch"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -26,12 +22,47 @@
             <el-option label="单次触发" :value="TaskType.ONE_TIME" />
           </el-select>
 
+          <el-button :type="showAll ? 'primary' : 'default'" :icon="Grid" @click="toggleDisplayMode">
+            {{ showAll ? "分类展示" : "全部展示" }}
+          </el-button>
+
+          <el-button :icon="FolderOpened" @click="router.push('/task/categories')">分类管理</el-button>
+
           <el-button type="primary" :icon="Plus" class="action-btn" @click="handleAddClick"> 添加任务 </el-button>
 
           <el-button type="primary" :icon="RefreshRight" circle class="refresh-btn" @click="fetchTasksData" />
         </div>
       </template>
     </ManagerHeader>
+
+    <div v-if="!showAll" v-loading="categoriesLoading" class="category-filter-panel">
+      <div class="category-filter-heading">
+        <div>
+          <strong>按任务分类展示</strong>
+          <span>选择分类查看对应的调度任务</span>
+        </div>
+        <span class="category-total">{{ categoryCards.length }} 个分组</span>
+      </div>
+      <div class="category-card-list">
+        <button
+          v-for="category in categoryCards"
+          :key="category.id"
+          type="button"
+          class="category-card"
+          :class="{ 'is-active': selectedCategoryId === category.id }"
+          @click="selectCategory(category.id)"
+        >
+          <span class="category-card__icon"
+            ><el-icon><FolderOpened /></el-icon
+          ></span>
+          <span class="category-card__content">
+            <span class="category-card__name">{{ category.name }}</span>
+            <span class="category-card__description">{{ category.description }}</span>
+          </span>
+          <span class="category-card__count">{{ category.task_count }}</span>
+        </button>
+      </div>
+    </div>
 
     <!-- 数据列表 -->
     <DataTable
@@ -52,6 +83,11 @@
         <div class="minimal-name-info">
           <span class="main-title">{{ formatTaskName(row.name).title }}</span>
         </div>
+      </template>
+
+      <template #category_name="{ row }">
+        <el-tag v-if="row.category_name" type="primary" effect="light" round>{{ row.category_name }}</el-tag>
+        <el-tag v-else type="info" effect="plain" round>未分类</el-tag>
       </template>
 
       <!-- 类型 -->
@@ -99,14 +135,34 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, markRaw } from "vue"
-import { Search, Plus, RefreshRight, VideoPause, VideoPlay, Monitor, Edit, Delete } from "@element-plus/icons-vue"
+import { useRouter } from "vue-router"
+import {
+  Search,
+  Plus,
+  RefreshRight,
+  VideoPause,
+  VideoPlay,
+  Monitor,
+  Edit,
+  Delete,
+  FolderOpened,
+  Grid
+} from "@element-plus/icons-vue"
 import PageContainer from "@@/components/PageContainer/index.vue"
 import ManagerHeader from "@@/components/ManagerHeader/index.vue"
 import DataTable from "@@/components/DataTable/index.vue"
 import OperateBtn from "@@/components/OperateBtn/index.vue"
 import TaskFormDrawer from "./components/TaskFormDrawer.vue"
 import TaskExecutionDialog from "./components/TaskExecutionDialog.vue"
-import { TaskType, TaskStatus, type TaskItem, type CreateTaskReq, type UpdateTaskReq } from "@/api/etask/manager/type"
+import {
+  TaskType,
+  TaskStatus,
+  type TaskItem,
+  type CreateTaskReq,
+  type UpdateTaskReq,
+  type TaskCategory
+} from "@/api/etask/manager/type"
+import { listTaskCategoriesApi } from "@/api/etask/manager"
 import { useTaskManager } from "./composables/useTaskManager"
 import type { Column } from "@@/components/DataTable/types"
 import { formatTimestamp } from "@@/utils/day"
@@ -115,6 +171,7 @@ const {
   loading,
   tasksData,
   searchQuery,
+  categoryFilter,
   paginationData,
   fetchTasksData,
   handleCreateTask,
@@ -127,7 +184,70 @@ const {
   handleSizeChange
 } = useTaskManager()
 
+const router = useRouter()
+
 const typeFilter = ref<string | null>(null)
+const categories = ref<TaskCategory[]>([])
+const uncategorizedCount = ref(0)
+const categoriesLoading = ref(false)
+const showAll = ref(false)
+const selectedCategoryId = ref(0)
+const categoryInitialized = ref(false)
+
+const categoryCards = computed(() => [
+  ...categories.value,
+  {
+    id: 0,
+    name: "未分类",
+    description: "尚未划分项目的调度任务",
+    task_count: uncategorizedCount.value,
+    ctime: 0,
+    utime: 0
+  }
+])
+
+const fetchCategories = async () => {
+  categoriesLoading.value = true
+  try {
+    const res = await listTaskCategoriesApi()
+    categories.value = res.data.categories || []
+    uncategorizedCount.value = res.data.uncategorized_count || 0
+    const selectedStillExists =
+      selectedCategoryId.value === 0 || categories.value.some((category) => category.id === selectedCategoryId.value)
+    if (!categoryInitialized.value || !selectedStillExists) {
+      selectedCategoryId.value =
+        categories.value.find((category) => category.task_count > 0)?.id || categories.value[0]?.id || 0
+    }
+    categoryInitialized.value = true
+    if (!showAll.value) categoryFilter.value = selectedCategoryId.value
+  } finally {
+    categoriesLoading.value = false
+  }
+}
+
+const selectCategory = async (categoryId: number) => {
+  selectedCategoryId.value = categoryId
+  categoryFilter.value = categoryId
+  paginationData.currentPage = 1
+  await fetchTasksData()
+}
+
+const toggleDisplayMode = async () => {
+  showAll.value = !showAll.value
+  categoryFilter.value = showAll.value ? undefined : selectedCategoryId.value
+  paginationData.currentPage = 1
+  await fetchTasksData()
+}
+
+const handleSearch = async () => {
+  paginationData.currentPage = 1
+  await fetchTasksData()
+}
+
+const refreshAll = async () => {
+  await fetchCategories()
+  await fetchTasksData()
+}
 
 // 过滤后的数据逻辑 (前端组合过滤)
 const filteredTasks = computed(() => {
@@ -137,6 +257,7 @@ const filteredTasks = computed(() => {
 
 const tableColumns: Column[] = [
   { prop: "name", label: "任务名称", slot: "name", align: "center" },
+  { prop: "category_name", label: "任务分类", slot: "category_name", align: "center" },
   { prop: "status", label: "状态", slot: "status", align: "center" },
   { prop: "type", label: "类型", slot: "type", align: "center" },
   { prop: "cron_expr", label: "调度周期", align: "center" },
@@ -207,7 +328,8 @@ const handleAction = async (row: TaskItem, code: string) => {
     logTaskName.value = row.name
     logVisible.value = true
   } else if (code === "delete") {
-    handleDeleteTask(row.id)
+    await handleDeleteTask(row.id)
+    await fetchCategories()
   }
 }
 
@@ -218,10 +340,16 @@ const handleFormSave = async (data: CreateTaskReq) => {
   } else {
     success = await handleCreateTask(data)
   }
-  if (success) formVisible.value = false
+  if (success) {
+    formVisible.value = false
+    await fetchCategories()
+  }
 }
 
-onMounted(() => fetchTasksData())
+onMounted(async () => {
+  await fetchCategories()
+  await fetchTasksData()
+})
 </script>
 
 <style scoped lang="scss">
@@ -235,6 +363,113 @@ onMounted(() => fetchTasksData())
   .type-filter {
     width: 120px;
   }
+}
+.category-filter-panel {
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.category-filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  color: #0f172a;
+
+  > div {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  strong {
+    font-size: 14px;
+  }
+
+  span {
+    color: #94a3b8;
+    font-size: 12px;
+  }
+}
+.category-total {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+.category-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.category-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: inherit;
+  text-align: left;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+
+  &:hover {
+    border-color: #93c5fd;
+    background: #f8fbff;
+  }
+
+  &.is-active {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgb(59 130 246 / 10%);
+    background: #eff6ff;
+  }
+}
+.category-card__icon {
+  display: grid;
+  flex: 0 0 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  color: #2563eb;
+  background: #dbeafe;
+}
+.category-card__content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+.category-card__name,
+.category-card__description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.category-card__name {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+}
+.category-card__description {
+  color: #94a3b8;
+  font-size: 11px;
+}
+.category-card__count {
+  display: grid;
+  min-width: 28px;
+  height: 24px;
+  place-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  background: #dbeafe;
 }
 .minimal-name-info {
   display: flex;

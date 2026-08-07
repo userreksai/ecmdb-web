@@ -15,6 +15,7 @@ export function useTaskManager() {
   const loading = ref(false)
   const tasksData = ref<TaskItem[]>([])
   const searchQuery = ref("")
+  const categoryFilter = ref<number | undefined>(undefined)
   const paginationData = reactive({
     currentPage: 1,
     pageSize: 20,
@@ -26,11 +27,13 @@ export function useTaskManager() {
   const fetchTasksData = async () => {
     loading.value = true
     try {
-      const res = await listTasksApi({
+      const query = {
         offset: (paginationData.currentPage - 1) * paginationData.pageSize,
         limit: paginationData.pageSize,
-        query: searchQuery.value
-      })
+        query: searchQuery.value || undefined,
+        ...(categoryFilter.value === undefined ? {} : { category_id: categoryFilter.value })
+      }
+      const res = await listTasksApi(query)
       tasksData.value = res.data.tasks
       paginationData.total = res.data.total
     } catch (error) {
@@ -123,6 +126,7 @@ export function useTaskManager() {
     loading,
     tasksData,
     searchQuery,
+    categoryFilter,
     paginationData,
     fetchTasksData,
     handleCreateTask,

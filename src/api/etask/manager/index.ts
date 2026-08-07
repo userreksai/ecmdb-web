@@ -69,3 +69,42 @@ export function stopTaskApi(taskId: number) {
     url: `${API_SERVICE.TASK}/manager/stop/${taskId}`
   })
 }
+
+/** 创建任务分类 */
+export function createTaskCategoryApi(data: task.CreateTaskCategoryReq) {
+  return instance.post<number>({
+    url: `${API_SERVICE.TASK}/manager/categories/create`,
+    data
+  })
+}
+
+/** 任务分类列表 */
+export function listTaskCategoriesApi(keyword = "") {
+  return instance.post<task.TaskCategoryList>({
+    url: `${API_SERVICE.TASK}/manager/categories/list`,
+    data: { keyword }
+  })
+}
+
+/** 更新任务分类 */
+export function updateTaskCategoryApi(data: task.UpdateTaskCategoryReq) {
+  return instance.post<number>({
+    url: `${API_SERVICE.TASK}/manager/categories/update`,
+    data
+  })
+}
+
+/** 删除任务分类，已归类任务会回到未分类 */
+export function deleteTaskCategoryApi(categoryId: number) {
+  return instance.delete<number>({
+    url: `${API_SERVICE.TASK}/manager/categories/${categoryId}`
+  })
+}
+
+/** 覆盖指定分类的任务集合 */
+export function replaceCategoryTasksApi(categoryId: number, data: task.ReplaceCategoryTasksReq) {
+  return instance.post<void>({
+    url: `${API_SERVICE.TASK}/manager/categories/${categoryId}/tasks`,
+    data
+  })
+}

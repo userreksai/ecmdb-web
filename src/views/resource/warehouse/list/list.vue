@@ -33,6 +33,7 @@
                 filterable
                 class="resource-search-field"
                 placeholder="选择搜索字段"
+                @change="handleSearchFieldChange(condition)"
                 @keyup.enter="handleSearch"
               >
                 <el-option label="全部字段" :value="ALL_SEARCH_FIELDS" />
@@ -66,12 +67,14 @@
                 v-model="condition.keyword"
                 clearable
                 class="resource-search"
-                :placeholder="
-                  condition.fieldUid === ALL_SEARCH_FIELDS ? '模糊搜索当前模型' : '精确值、>2、<2；留空查空值'
-                "
+                :placeholder="getSearchPlaceholder(condition)"
                 :prefix-icon="Search"
                 @keyup.enter="handleSearch"
               />
+              <el-radio-group v-model="condition.matchType" class="resource-match-mode" aria-label="选择匹配方式">
+                <el-radio-button value="exact">精准匹配</el-radio-button>
+                <el-radio-button value="fuzzy">模糊匹配</el-radio-button>
+              </el-radio-group>
             </div>
           </div>
           <el-button type="primary" :icon="Search" :loading="loading" class="action-btn" @click="handleSearch">
@@ -327,7 +330,11 @@ import {
   findSecureData,
   setCustomFieldApi
 } from "@/api/resource"
-import { type ModelResourceSearchCondition, type Resource } from "@/api/resource/types/resource"
+import {
+  type ModelResourceSearchCondition,
+  type ModelResourceSearchMatchType,
+  type Resource
+} from "@/api/resource/types/resource"
 import {
   CirclePlus,
   Edit,
@@ -371,19 +378,32 @@ interface SearchConditionRow {
   id: number
   fieldUid: string
   keyword: string
+  matchType: ModelResourceSearchMatchType
 }
 
 let nextSearchConditionId = 1
 const createSearchCondition = (): SearchConditionRow => ({
   id: nextSearchConditionId++,
   fieldUid: ALL_SEARCH_FIELDS,
-  keyword: ""
+  keyword: "",
+  matchType: "fuzzy"
 })
 const searchConditions = ref<SearchConditionRow[]>([createSearchCondition()])
 const activeSearchConditions = ref<ModelResourceSearchCondition[]>([])
 
 const addSearchCondition = () => {
   searchConditions.value.push(createSearchCondition())
+}
+
+const handleSearchFieldChange = (condition: SearchConditionRow) => {
+  condition.matchType = condition.fieldUid === ALL_SEARCH_FIELDS ? "fuzzy" : "exact"
+}
+
+const getSearchPlaceholder = (condition: SearchConditionRow) => {
+  if (condition.matchType === "fuzzy") {
+    return condition.fieldUid === ALL_SEARCH_FIELDS ? "模糊搜索当前模型" : "模糊匹配字段内容"
+  }
+  return condition.fieldUid === ALL_SEARCH_FIELDS ? "精准匹配任一字段" : "精准值、>2、<2；留空查空值"
 }
 
 const removeSearchCondition = (id: number) => {
@@ -402,6 +422,7 @@ const buildSearchRequest = <T extends { model_uid: string; offset: number; limit
     ...params,
     keyword: firstCondition?.keyword || "",
     ...(firstCondition?.field_uid ? { field_uid: firstCondition.field_uid } : {}),
+    ...(firstCondition?.match_type ? { match_type: firstCondition.match_type } : {}),
     conditions: activeSearchConditions.value
   }
 }
@@ -819,6 +840,7 @@ const handleSearch = () => {
   activeSearchConditions.value = searchConditions.value
     .map((condition) => ({
       keyword: condition.keyword.trim(),
+      match_type: condition.matchType,
       ...(condition.fieldUid === ALL_SEARCH_FIELDS ? {} : { field_uid: condition.fieldUid })
     }))
     .filter((condition) => Boolean(condition.field_uid || condition.keyword))
@@ -1031,6 +1053,11 @@ watch(
   .resource-filter-action {
     flex: none;
     margin-left: 0;
+  }
+
+  .resource-match-mode {
+    flex: none;
+    white-space: nowrap;
   }
 
   .resource-search {

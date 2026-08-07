@@ -11,7 +11,7 @@ export function listResourceApi(data: resource.ListResourceReq) {
   })
 }
 
-/** 在指定模型内搜索资源：全部字段模糊匹配，指定字段精确匹配 */
+/** 在指定模型内使用多个 AND 条件搜索资源，每个条件可选择精准或模糊匹配 */
 export function searchModelResourceApi(data: resource.SearchModelResourceReq) {
   return instance.post<resource.ResourceData>({
     url: `${API_SERVICE.CMDB}/resource/list/search`,

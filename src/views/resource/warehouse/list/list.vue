@@ -401,11 +401,11 @@ const handleSearchFieldChange = (condition: SearchConditionRow) => {
 
 const getSearchPlaceholder = (condition: SearchConditionRow) => {
   if (condition.matchType === "fuzzy") {
-    return "模糊值，多个条件用英文逗号分隔（AND）"
+    return "模糊值，多个值用英文逗号分隔（OR）"
   }
   return condition.fieldUid === ALL_SEARCH_FIELDS
-    ? "精准值，多个条件用英文逗号分隔（AND）"
-    : "精准值、>2、<2；多个条件用英文逗号分隔（AND）"
+    ? "精准值，多个值用英文逗号分隔（OR）"
+    : "精准值、>2、<2；多个值用英文逗号分隔（OR）"
 }
 
 const removeSearchCondition = (id: number) => {
@@ -840,21 +840,15 @@ const listResourceByModelUid = async () => {
 const handleSearch = () => {
   clearResourceSelection()
   activeSearchConditions.value = searchConditions.value
-    .flatMap((condition) => {
-      const normalizedKeyword = condition.keyword.trim()
-      const keywords = normalizedKeyword
-        ? normalizedKeyword
-            .split(",")
-            .map((keyword) => keyword.trim())
-            .filter(Boolean)
-        : [""]
-
-      return keywords.map((keyword) => ({
-        keyword,
-        match_type: condition.matchType,
-        ...(condition.fieldUid === ALL_SEARCH_FIELDS ? {} : { field_uid: condition.fieldUid })
-      }))
-    })
+    .map((condition) => ({
+      keyword: condition.keyword
+        .split(",")
+        .map((keyword) => keyword.trim())
+        .filter(Boolean)
+        .join(","),
+      match_type: condition.matchType,
+      ...(condition.fieldUid === ALL_SEARCH_FIELDS ? {} : { field_uid: condition.fieldUid })
+    }))
     .filter((condition) => Boolean(condition.field_uid || condition.keyword))
   if (paginationData.currentPage === 1) {
     listResourceByModelUid()

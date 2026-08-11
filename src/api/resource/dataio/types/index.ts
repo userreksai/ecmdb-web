@@ -4,12 +4,47 @@ export interface ImportReq {
   model_uid: string
   /** S3 文件键 */
   file_key: string
+  /** 空表导入时是否确认清空当前模型 */
+  confirm_empty?: boolean
 }
 
 /** 导入数据响应 */
 export interface ImportRes {
-  /** 导入成功的数据条数 */
+  /** 本次写入（新增 + 更新）的数据条数 */
   imported_count: number
+  created_count: number
+  updated_count: number
+  deleted_count: number
+  unchanged_count: number
+}
+
+export interface ImportPreviewReq {
+  model_uid: string
+  file_key: string
+}
+
+export type ImportChangeAction = "create" | "update" | "delete" | "unchanged"
+
+export interface ImportPreviewRow {
+  unique_id: string
+  action: ImportChangeAction
+  changed_fields: string[]
+  original_data: Record<string, unknown> | null
+  modified_data: Record<string, unknown> | null
+}
+
+export interface ImportPreviewRes {
+  model_uid: string
+  unique_field: string
+  sheet_count: number
+  current_count: number
+  created_count: number
+  updated_count: number
+  deleted_count: number
+  unchanged_count: number
+  is_empty: boolean
+  columns: string[]
+  rows: ImportPreviewRow[]
 }
 
 /** 导出操作符枚举 */

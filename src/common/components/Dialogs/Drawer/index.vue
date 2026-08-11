@@ -44,6 +44,7 @@
             v-if="showConfirmButton"
             :type="confirmButtonType"
             :loading="confirmLoading"
+            :disabled="confirmDisabled"
             @click="handleConfirm"
             >{{ confirmButtonText }}</el-button
           >
@@ -77,6 +78,8 @@ interface Props {
   closeOnCancel?: boolean
   /** 确定按钮加载状态 */
   confirmLoading?: boolean
+  /** 确定按钮禁用状态 */
+  confirmDisabled?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -91,7 +94,8 @@ const props = withDefaults(defineProps<Props>(), {
   confirmButtonText: "确定",
   confirmButtonType: "primary",
   closeOnCancel: true,
-  confirmLoading: false
+  confirmLoading: false,
+  confirmDisabled: false
 })
 
 const emits = defineEmits<{

@@ -1,7 +1,7 @@
 import { ref } from "vue"
 import { ElMessage } from "element-plus"
-import { exportTemplateApi, importDataApi, exportDataApi } from "@/api/resource/dataio"
-import type { ImportReq, ExportReq } from "@/api/resource/dataio/types"
+import { exportTemplateApi, importDataApi, previewImportDataApi, exportDataApi } from "@/api/resource/dataio"
+import type { ImportReq, ImportRes, ImportPreviewRes, ExportReq } from "@/api/resource/dataio/types"
 import { putMinioPresignedUrl } from "@/api/tools"
 import { getLocalMinioUrl } from "@/common/utils/url"
 import axios from "axios"
@@ -14,6 +14,7 @@ import { downloadBlob } from "@/common/utils/file"
 export function useDataIO() {
   const uploading = ref(false)
   const importing = ref(false)
+  const previewing = ref(false)
   const exporting = ref(false)
 
   /**
@@ -141,7 +142,20 @@ export function useDataIO() {
    * 执行数据导入 (已上传文件)
    * NOTE: 使用已上传到 S3 的文件 key 调用导入接口
    */
-  const executeImportData = async (fileKey: string, modelUid: string): Promise<number> => {
+  const previewImportData = async (fileKey: string, modelUid: string): Promise<ImportPreviewRes> => {
+    try {
+      previewing.value = true
+      const { data } = await previewImportDataApi({
+        model_uid: modelUid,
+        file_key: fileKey
+      })
+      return data
+    } finally {
+      previewing.value = false
+    }
+  }
+
+  const executeImportData = async (fileKey: string, modelUid: string, confirmEmpty = false): Promise<ImportRes> => {
     try {
       importing.value = true
       ElMessage.info("正在执行导入,请稍候...")
@@ -149,13 +163,16 @@ export function useDataIO() {
       // 调用导入接口
       const req: ImportReq = {
         model_uid: modelUid,
-        file_key: fileKey
+        file_key: fileKey,
+        confirm_empty: confirmEmpty
       }
 
       const { data } = await importDataApi(req)
 
-      ElMessage.success(`导入成功,共导入 ${data.imported_count} 条数据`)
-      return data.imported_count
+      ElMessage.success(
+        `导入完成：新增 ${data.created_count} 条，更新 ${data.updated_count} 条，删除 ${data.deleted_count} 条`
+      )
+      return data
     } catch (error) {
       console.error("导入数据失败:", error)
       throw error
@@ -167,10 +184,12 @@ export function useDataIO() {
   return {
     uploading,
     importing,
+    previewing,
     exporting,
     uploadFileToS3,
     exportTemplate,
     importData,
+    previewImportData,
     executeImportData,
     exportData
   }

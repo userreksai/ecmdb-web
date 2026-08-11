@@ -20,7 +20,20 @@ export function exportTemplateApi(modelUid: string) {
 export function importDataApi(data: DataIO.ImportReq) {
   return instance.post<DataIO.ImportRes>({
     url: `${API_SERVICE.CMDB}/dataio/import`,
-    data
+    data,
+    timeout: 60000
+  })
+}
+
+/**
+ * 预览导入差异
+ * NOTE: 只计算新增、更新、删除和不变数据，不写入数据库
+ */
+export function previewImportDataApi(data: DataIO.ImportPreviewReq) {
+  return instance.post<DataIO.ImportPreviewRes>({
+    url: `${API_SERVICE.CMDB}/dataio/import/preview`,
+    data,
+    timeout: 60000
   })
 }
 

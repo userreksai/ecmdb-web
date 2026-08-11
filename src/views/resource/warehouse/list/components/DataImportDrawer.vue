@@ -2,149 +2,163 @@
   <Drawer
     v-model="visible"
     title="批量导入数据"
-    subtitle="按照模板格式批量导入资产数据"
-    size="35%"
+    subtitle="上传后先核对差异，确认后再同步模型数据"
+    size="72%"
     direction="rtl"
     :header-icon="Upload"
     :show-footer="true"
     cancel-button-text="取消"
-    confirm-button-text="开始导入"
+    :confirm-button-text="preview?.is_empty ? '确认清空模型' : '确认导入'"
+    :confirm-button-type="preview?.is_empty ? 'danger' : 'primary'"
     :confirm-loading="importing"
-    :confirm-disabled="!uploadedFileKey || uploading"
+    :confirm-disabled="!preview || uploading || previewing"
     @cancel="handleClose"
     @confirm="handleImport"
     @closed="handleClose"
   >
     <div class="import-drawer-content">
-      <!-- 步骤指引 -->
       <div class="steps-guide">
-        <div class="step-item">
-          <div class="step-number">1</div>
-          <div class="step-info">
-            <div class="step-title">下载模板</div>
+        <div v-for="(step, index) in steps" :key="step" class="step-wrap">
+          <div class="step-item" :class="{ active: currentStep >= index + 1 }">
+            <div class="step-number">{{ index + 1 }}</div>
+            <div class="step-title">{{ step }}</div>
           </div>
-        </div>
-        <el-icon class="step-arrow"><Right /></el-icon>
-        <div class="step-item">
-          <div class="step-number">2</div>
-          <div class="step-info">
-            <div class="step-title">填写数据</div>
-          </div>
-        </div>
-        <el-icon class="step-arrow"><Right /></el-icon>
-        <div class="step-item">
-          <div class="step-number">3</div>
-          <div class="step-info">
-            <div class="step-title">上传导入</div>
-          </div>
+          <el-icon v-if="index < steps.length - 1" class="step-arrow"><Right /></el-icon>
         </div>
       </div>
 
-      <!-- 融合设计: 左侧按钮 + 右侧上传区域 -->
-      <div class="unified-card">
-        <!-- 左侧: 下载按钮 -->
-        <div class="left-sidebar">
-          <div class="download-btn-wrapper" @click="handleDownloadTemplate">
-            <el-icon class="download-icon" :class="{ loading: exporting }">
-              <Download v-if="!exporting" />
-              <Loading v-else />
+      <div class="upload-card">
+        <el-button :icon="Download" :loading="exporting" @click="handleDownloadTemplate"> 下载模板 </el-button>
+
+        <el-upload
+          v-if="!selectedFile"
+          ref="uploadRef"
+          class="upload-dragger"
+          drag
+          :auto-upload="true"
+          :limit="1"
+          :http-request="handleUploadRequest"
+          :on-exceed="handleExceed"
+          accept=".xlsx,.xls"
+          :show-file-list="false"
+        >
+          <el-icon class="upload-icon"><Upload /></el-icon>
+          <div class="upload-title">点击或拖拽 Excel 文件到此处</div>
+          <div class="upload-hint">上传完成后会自动生成数据差异表，不会立即写入模型</div>
+        </el-upload>
+
+        <div v-else class="file-selected">
+          <div class="file-info">
+            <el-icon class="file-icon" :class="{ loading: uploading || previewing }">
+              <Loading v-if="uploading || previewing" />
+              <Document v-else />
             </el-icon>
-            <span class="download-text">下载模板文件</span>
-          </div>
-        </div>
-
-        <!-- 右侧: 上传区域 -->
-        <div class="right-content">
-          <div class="section-header">
-            <div class="header-left">
-              <el-icon class="section-icon"><UploadFilled /></el-icon>
-              <h3 class="section-title">步骤 2-3: 上传填写好的文件</h3>
+            <div>
+              <div class="file-name">{{ selectedFile.name }}</div>
+              <div class="file-meta">
+                {{ formatFileSize(selectedFile.size) }} ·
+                {{ uploading ? "正在上传" : previewing ? "正在对比模型数据" : preview ? "差异已生成" : "等待处理" }}
+              </div>
             </div>
           </div>
-          <div class="section-body">
-            <!-- 未选择文件: 显示上传区域 -->
-            <el-upload
-              v-if="!selectedFile"
-              ref="uploadRef"
-              class="upload-dragger"
-              drag
-              :auto-upload="true"
-              :limit="1"
-              :http-request="handleUploadRequest"
-              :on-exceed="handleExceed"
-              accept=".xlsx,.xls"
-              :show-file-list="false"
-            >
-              <div class="upload-content">
-                <el-icon class="upload-icon"><Upload /></el-icon>
-                <p class="upload-title">点击或拖拽文件到此处</p>
-                <p class="upload-hint">文件将自动上传并准备导入</p>
-              </div>
-            </el-upload>
-
-            <!-- 已选择文件: 显示文件信息 -->
-            <div v-else class="file-selected">
-              <div class="file-info">
-                <el-icon class="file-icon" :class="{ 'is-loading': uploading }">
-                  <Loading v-if="uploading" />
-                  <Document v-else />
-                </el-icon>
-                <div class="file-details">
-                  <div class="file-name">{{ selectedFile.name }}</div>
-                  <div class="file-meta">
-                    <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
-                    <span class="file-status" :class="{ 'text-blue': uploading, 'text-green': !uploading }">
-                      <el-icon v-if="uploading"><Loading /></el-icon>
-                      <el-icon v-else><CircleCheck /></el-icon>
-                      {{ uploading ? "上传中..." : "已准备就绪" }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <el-button
-                type="danger"
-                :icon="Delete"
-                circle
-                size="small"
-                @click="handleRemoveFile"
-                :disabled="uploading"
-              />
-            </div>
-          </div>
+          <el-button
+            type="danger"
+            :icon="Delete"
+            circle
+            :disabled="uploading || previewing"
+            @click="handleRemoveFile"
+          />
         </div>
       </div>
 
-      <!-- 导入说明 -->
-      <div class="tips-section">
-        <div class="tips-header">
-          <el-icon class="tips-icon"><InfoFilled /></el-icon>
-          <span class="tips-title">导入说明</span>
+      <template v-if="preview">
+        <el-alert v-if="preview.is_empty" title="表格数据为空" type="error" :closable="false" show-icon>
+          <template #default>
+            继续导入将删除“{{ modelName || modelUid }}”当前全部 {{ preview.current_count }} 条模型数据。
+          </template>
+        </el-alert>
+
+        <div class="summary-grid">
+          <div class="summary-card source">
+            <span>表格数据</span><strong>{{ preview.sheet_count }}</strong>
+          </div>
+          <div class="summary-card create">
+            <span>新增</span><strong>{{ preview.created_count }}</strong>
+          </div>
+          <div class="summary-card update">
+            <span>修改</span><strong>{{ preview.updated_count }}</strong>
+          </div>
+          <div class="summary-card delete">
+            <span>删除</span><strong>{{ preview.deleted_count }}</strong>
+          </div>
+          <div class="summary-card unchanged">
+            <span>不变</span><strong>{{ preview.unchanged_count }}</strong>
+          </div>
         </div>
-        <ul class="tips-list">
-          <li>请确保 Excel 文件格式正确,字段名称与模板一致</li>
-          <li>文件拖拽后会自动上传到服务器,确认无误后点击下方按钮开始导入数据</li>
-        </ul>
+
+        <div class="diff-card">
+          <div class="diff-header">
+            <div>
+              <h3>数据对比</h3>
+              <p>以“{{ preview.unique_field }}”作为唯一索引；表格未包含的字段不会被覆盖。</p>
+            </div>
+            <el-radio-group v-model="actionFilter" size="small">
+              <el-radio-button label="all">全部</el-radio-button>
+              <el-radio-button label="create">新增</el-radio-button>
+              <el-radio-button label="update">修改</el-radio-button>
+              <el-radio-button label="delete">删除</el-radio-button>
+              <el-radio-button label="unchanged">不变</el-radio-button>
+            </el-radio-group>
+          </div>
+
+          <el-table :data="filteredRows" border stripe height="360" empty-text="没有符合条件的差异数据">
+            <el-table-column prop="unique_id" :label="preview.unique_field" min-width="160" fixed="left" />
+            <el-table-column label="操作" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="getActionTag(row.action).type" effect="plain">{{
+                  getActionTag(row.action).label
+                }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="变更字段" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.changed_fields.join("、") || "-" }}</template>
+            </el-table-column>
+            <el-table-column label="原数据" min-width="300" show-overflow-tooltip>
+              <template #default="{ row }"
+                ><code>{{ compactJson(row.original_data) }}</code></template
+              >
+            </el-table-column>
+            <el-table-column label="修改后数据" min-width="300" show-overflow-tooltip>
+              <template #default="{ row }"
+                ><code>{{ compactJson(row.modified_data) }}</code></template
+              >
+            </el-table-column>
+          </el-table>
+        </div>
+      </template>
+
+      <div class="tips-section">
+        <el-icon><InfoFilled /></el-icon>
+        <div>
+          <strong>导入规则</strong>
+          <ul>
+            <li>字段标准与导出文件一致，唯一索引相同的数据执行更新，不存在的数据执行新增。</li>
+            <li>表格未包含的模型字段保持原值；模型中多出的数据会列为删除项，确认后以表格为准同步。</li>
+            <li>空表不会直接执行，必须再次确认后才会清空当前模型。</li>
+          </ul>
+        </div>
       </div>
     </div>
   </Drawer>
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from "vue"
-import {
-  Upload,
-  Download,
-  Document,
-  Delete,
-  UploadFilled,
-  InfoFilled,
-  Right,
-  CircleCheck,
-  Loading
-} from "@element-plus/icons-vue"
-import { ElMessage, type UploadInstance, type UploadRequestOptions } from "element-plus"
+import { computed, ref } from "vue"
+import { Delete, Document, Download, InfoFilled, Loading, Right, Upload } from "@element-plus/icons-vue"
+import { ElMessage, ElMessageBox, type UploadInstance, type UploadRequestOptions } from "element-plus"
 import { Drawer } from "@@/components/Dialogs"
 import { useDataIO } from "@/common/composables/useDataIO"
+import type { ImportChangeAction, ImportPreviewRes } from "@/api/resource/dataio/types"
 
 interface Props {
   modelValue: boolean
@@ -152,10 +166,7 @@ interface Props {
   modelName?: string
 }
 
-const props = withDefaults(defineProps<Props>(), {
-  modelName: ""
-})
-
+const props = withDefaults(defineProps<Props>(), { modelName: "" })
 const emits = defineEmits<{
   "update:modelValue": [value: boolean]
   "import-success": [count: number]
@@ -166,74 +177,109 @@ const visible = computed({
   set: (value) => emits("update:modelValue", value)
 })
 
-const { exporting, importing, uploading, exportTemplate, uploadFileToS3, executeImportData } = useDataIO()
+const {
+  exporting,
+  importing,
+  uploading,
+  previewing,
+  exportTemplate,
+  uploadFileToS3,
+  previewImportData,
+  executeImportData
+} = useDataIO()
 
+const steps = ["下载模板", "上传文件", "核对差异", "确认同步"]
 const uploadRef = ref<UploadInstance>()
 const selectedFile = ref<File | null>(null)
-const uploadedFileKey = ref<string>("")
+const uploadedFileKey = ref("")
+const preview = ref<ImportPreviewRes | null>(null)
+const actionFilter = ref<"all" | ImportChangeAction>("all")
 
-// 下载模板
-const handleDownloadTemplate = async () => {
-  await exportTemplate(props.modelUid, props.modelName)
+const currentStep = computed(() => {
+  if (preview.value) return 4
+  if (selectedFile.value) return 2
+  return 1
+})
+
+const filteredRows = computed(() => {
+  if (!preview.value) return []
+  if (actionFilter.value === "all") return preview.value.rows
+  return preview.value.rows.filter((row) => row.action === actionFilter.value)
+})
+
+const actionTag: Record<ImportChangeAction, { label: string; type: "success" | "warning" | "danger" | "info" }> = {
+  create: { label: "新增", type: "success" },
+  update: { label: "修改", type: "warning" },
+  delete: { label: "删除", type: "danger" },
+  unchanged: { label: "不变", type: "info" }
 }
+const getActionTag = (action: ImportChangeAction) => actionTag[action] || actionTag.unchanged
 
-// 处理文件上传请求
+const handleDownloadTemplate = () => exportTemplate(props.modelUid, props.modelName)
+
 const handleUploadRequest = async (options: UploadRequestOptions) => {
-  const file = options.file
-  selectedFile.value = file
-
+  selectedFile.value = options.file
+  preview.value = null
   try {
-    const key = await uploadFileToS3(file)
-    uploadedFileKey.value = key
+    uploadedFileKey.value = await uploadFileToS3(options.file)
+    preview.value = await previewImportData(uploadedFileKey.value, props.modelUid)
+    ElMessage.success("数据差异已生成，请核对后确认导入")
   } catch (error) {
-    selectedFile.value = null
-    uploadRef.value?.clearFiles()
-    ElMessage.error("文件上传失败，请重试")
+    console.error("生成导入差异失败:", error)
+    handleRemoveFile()
   }
 }
 
-// 文件超出限制
-const handleExceed = () => {
-  ElMessage.warning("只能上传一个文件,请先移除已选择的文件")
-}
+const handleExceed = () => ElMessage.warning("只能上传一个文件，请先移除已选择的文件")
 
-// 移除文件
 const handleRemoveFile = () => {
   selectedFile.value = null
   uploadedFileKey.value = ""
+  preview.value = null
+  actionFilter.value = "all"
   uploadRef.value?.clearFiles()
 }
 
-// 格式化文件大小
-const formatFileSize = (bytes: number): string => {
+const formatFileSize = (bytes: number) => {
   if (bytes === 0) return "0 B"
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
+  const units = ["B", "KB", "MB", "GB"]
+  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${Math.round((bytes / 1024 ** index) * 100) / 100} ${units[index]}`
 }
 
-// 开始导入
+const compactJson = (data: Record<string, unknown> | null) => (data ? JSON.stringify(data) : "-")
+
 const handleImport = async () => {
-  if (!uploadedFileKey.value) {
-    ElMessage.warning("请等待文件上传完成")
+  if (!uploadedFileKey.value || !preview.value) {
+    ElMessage.warning("请先上传文件并完成数据对比")
     return
   }
 
+  let confirmEmpty = false
+  if (preview.value.is_empty) {
+    try {
+      await ElMessageBox.confirm(
+        `表格数据为空，继续导入将删除“${props.modelName || props.modelUid}”全部 ${preview.value.current_count} 条数据，是否确认？`,
+        "确认清空模型数据",
+        { type: "error", confirmButtonText: "确认全部删除", cancelButtonText: "取消" }
+      )
+      confirmEmpty = true
+    } catch {
+      return
+    }
+  }
+
   try {
-    const count = await executeImportData(uploadedFileKey.value, props.modelUid)
-    emits("import-success", count)
+    const result = await executeImportData(uploadedFileKey.value, props.modelUid, confirmEmpty)
+    emits("import-success", result.imported_count)
     handleClose()
   } catch (error) {
     console.error("导入失败:", error)
   }
 }
 
-// 关闭抽屉
 const handleClose = () => {
-  selectedFile.value = null
-  uploadedFileKey.value = ""
-  uploadRef.value?.clearFiles()
+  handleRemoveFile()
   visible.value = false
 }
 </script>
@@ -242,338 +288,230 @@ const handleClose = () => {
 .import-drawer-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 20px; // 添加左右和上下 padding
+  gap: 18px;
+  padding: 20px;
 }
 
-// 步骤指引
 .steps-guide {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px;
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
   border-radius: 12px;
-
-  .step-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex: 1;
-
-    .step-number {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: #3b82f6;
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 600;
-      font-size: 16px;
-      flex-shrink: 0;
-    }
-
-    .step-info {
-      .step-title {
-        font-size: 14px;
-        font-weight: 600;
-        color: #1e40af;
-        line-height: 1.2;
-      }
-
-      .step-desc {
-        font-size: 12px;
-        color: #64748b;
-        margin-top: 2px;
-      }
-    }
-  }
-
-  .step-arrow {
-    color: #3b82f6;
-    font-size: 18px;
-    margin: 0 4px;
-    flex-shrink: 0;
-  }
 }
 
-// 融合卡片设计
-.unified-card {
+.step-wrap {
   display: flex;
+  flex: 1;
+  align-items: center;
+
+  &:last-child {
+    flex: 0 0 auto;
+  }
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #94a3b8;
+
+  &.active {
+    color: #1d4ed8;
+  }
+}
+
+.step-number {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: white;
+  background: #94a3b8;
+  border-radius: 50%;
+  font-weight: 700;
+}
+
+.step-item.active .step-number {
+  background: #2563eb;
+}
+.step-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.step-arrow {
+  flex: 1;
+  margin: 0 12px;
+  color: #93c5fd;
+}
+
+.upload-card,
+.diff-card {
+  padding: 16px;
   background: white;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
-
-  &:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  }
-
-  // 左侧边栏 - 下载按钮
-  .left-sidebar {
-    display: flex;
-    align-items: stretch;
-    background: white; // 与右侧一致
-    border-right: 1px solid #e5e7eb; // 改为灰色边框
-    padding: 16px 12px;
-
-    .download-btn-wrapper {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      padding: 20px 10px;
-      background: linear-gradient(180deg, #06b6d4 0%, #0891b2 100%); // 清新的青色
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      width: 56px;
-      min-height: 180px;
-      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.25);
-
-      &:hover {
-        transform: scale(1.02);
-        box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
-        background: linear-gradient(180deg, #0891b2 0%, #0e7490 100%);
-      }
-
-      &:active {
-        transform: scale(0.98);
-      }
-
-      .download-icon {
-        font-size: 26px;
-        color: white;
-        flex-shrink: 0;
-
-        &.loading {
-          animation: rotate 1s linear infinite;
-        }
-      }
-
-      .download-text {
-        writing-mode: vertical-rl;
-        text-orientation: upright;
-        font-size: 13px;
-        font-weight: 600;
-        color: white;
-        letter-spacing: 3px;
-        line-height: 1;
-      }
-    }
-  }
-
-  // 右侧内容区域
-  .right-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      background: #f9fafb;
-      border-bottom: 1px solid #e5e7eb;
-
-      .header-left {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-
-        .section-icon {
-          font-size: 16px;
-          color: #10b981;
-        }
-
-        .section-title {
-          font-size: 13px;
-          font-weight: 600;
-          color: #111827;
-          margin: 0;
-        }
-      }
-    }
-
-    .section-body {
-      padding: 16px;
-      flex: 1;
-    }
-  }
 }
 
-// 上传区域
+.upload-card {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+}
 .upload-dragger {
-  :deep(.el-upload) {
-    width: 100%;
-  }
-
-  :deep(.el-upload-dragger) {
-    width: 100%;
-    min-height: 180px;
-    border: 2px dashed #d1d5db;
-    border-radius: 10px;
-    background: #fafafa;
-    transition: all 0.3s ease;
-    padding: 24px;
-
-    &:hover {
-      border-color: #3b82f6;
-      background: #f0f9ff;
-    }
-  }
-
-  .upload-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-
-    .upload-icon {
-      font-size: 48px;
-      color: #9ca3af;
-      margin-bottom: 12px;
-    }
-
-    .upload-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: #374151;
-      margin: 0 0 6px 0;
-    }
-
-    .upload-hint {
-      font-size: 12px;
-      color: #9ca3af;
-      margin: 0;
-    }
-  }
+  flex: 1;
+}
+.upload-dragger :deep(.el-upload),
+.upload-dragger :deep(.el-upload-dragger) {
+  width: 100%;
+}
+.upload-dragger :deep(.el-upload-dragger) {
+  padding: 20px;
+}
+.upload-icon {
+  margin-bottom: 8px;
+  font-size: 34px;
+  color: #3b82f6;
+}
+.upload-title {
+  color: #334155;
+  font-weight: 600;
+}
+.upload-hint {
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 12px;
 }
 
-// 已选择文件
 .file-selected {
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
   background: #f0fdf4;
-  border: 1.5px solid #86efac;
+  border: 1px solid #86efac;
+  border-radius: 9px;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.file-icon {
+  font-size: 30px;
+  color: #10b981;
+}
+.file-icon.loading {
+  color: #3b82f6;
+  animation: rotate 1s linear infinite;
+}
+.file-name {
+  color: #065f46;
+  font-weight: 600;
+}
+.file-meta {
+  margin-top: 4px;
+  color: #059669;
+  font-size: 12px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #64748b;
   border-radius: 10px;
+  background: #fff;
 
-  .file-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex: 1;
-    min-width: 0;
-
-    .file-icon {
-      font-size: 32px;
-      color: #10b981;
-      flex-shrink: 0;
-
-      &.is-loading {
-        color: #3b82f6;
-        animation: rotate 1s linear infinite;
-      }
-    }
-
-    .file-details {
-      flex: 1;
-      min-width: 0;
-
-      .file-name {
-        font-size: 14px;
-        font-weight: 600;
-        color: #065f46;
-        margin-bottom: 4px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .file-meta {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 12px;
-
-        .file-size {
-          color: #059669;
-        }
-
-        .file-status {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          color: #10b981;
-          font-weight: 500;
-
-          &.text-blue {
-            color: #3b82f6;
-          }
-
-          &.text-green {
-            color: #10b981;
-          }
-        }
-      }
-    }
+  span {
+    color: #64748b;
+    font-size: 13px;
+  }
+  strong {
+    color: #0f172a;
+    font-size: 24px;
+  }
+  &.create {
+    border-left-color: #22c55e;
+  }
+  &.update {
+    border-left-color: #f59e0b;
+  }
+  &.delete {
+    border-left-color: #ef4444;
+  }
+  &.unchanged {
+    border-left-color: #94a3b8;
+  }
+  &.source {
+    border-left-color: #3b82f6;
   }
 }
 
-// 提示区块
+.diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+
+  h3 {
+    margin: 0;
+    color: #1e293b;
+    font-size: 15px;
+  }
+  p {
+    margin: 5px 0 0;
+    color: #64748b;
+    font-size: 12px;
+  }
+}
+
+code {
+  color: #475569;
+  font-size: 12px;
+}
+
 .tips-section {
+  display: flex;
+  gap: 10px;
   padding: 14px 16px;
+  color: #78350f;
   background: #fffbeb;
   border: 1px solid #fde68a;
   border-radius: 10px;
 
-  .tips-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-
-    .tips-icon {
-      font-size: 16px;
-      color: #f59e0b;
-    }
-
-    .tips-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #92400e;
-    }
-  }
-
-  .tips-list {
-    margin: 0;
-    padding-left: 20px;
-    font-size: 12px; // Fixed missing semicolon here in strict sense, but replacing whole block
-    color: #78350f;
-
-    li {
-      margin: 6px 0;
-      line-height: 1.5;
-    }
+  ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+    line-height: 1.7;
   }
 }
 
-// 旋转动画
 @keyframes rotate {
-  from {
-    transform: rotate(0deg);
-  }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .diff-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

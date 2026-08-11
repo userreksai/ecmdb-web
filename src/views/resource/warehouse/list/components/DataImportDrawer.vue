@@ -38,8 +38,9 @@
           :auto-upload="true"
           :limit="1"
           :http-request="handleUploadRequest"
+          :before-upload="validateImportFile"
           :on-exceed="handleExceed"
-          accept=".xlsx,.xls"
+          accept=".xlsx"
           :show-file-list="false"
         >
           <el-icon class="upload-icon"><Upload /></el-icon>
@@ -155,7 +156,13 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue"
 import { Delete, Document, Download, InfoFilled, Loading, Right, Upload } from "@element-plus/icons-vue"
-import { ElMessage, ElMessageBox, type UploadInstance, type UploadRequestOptions } from "element-plus"
+import {
+  ElMessage,
+  ElMessageBox,
+  type UploadInstance,
+  type UploadRawFile,
+  type UploadRequestOptions
+} from "element-plus"
 import { Drawer } from "@@/components/Dialogs"
 import { useDataIO } from "@/common/composables/useDataIO"
 import type { ImportChangeAction, ImportPreviewRes } from "@/api/resource/dataio/types"
@@ -216,6 +223,25 @@ const actionTag: Record<ImportChangeAction, { label: string; type: "success" | "
 const getActionTag = (action: ImportChangeAction) => actionTag[action] || actionTag.unchanged
 
 const handleDownloadTemplate = () => exportTemplate(props.modelUid, props.modelName)
+
+const validateImportFile = async (file: UploadRawFile) => {
+  if (!file.name.toLowerCase().endsWith(".xlsx")) {
+    ElMessage.error("仅支持由本系统导出或下载模板生成的 .xlsx 文件")
+    return false
+  }
+
+  const signature = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+  const isZip =
+    signature[0] === 0x50 &&
+    signature[1] === 0x4b &&
+    ((signature[2] === 0x03 && signature[3] === 0x04) ||
+      (signature[2] === 0x05 && signature[3] === 0x06) ||
+      (signature[2] === 0x07 && signature[3] === 0x08))
+  if (isZip) return true
+
+  ElMessage.error("文件内容不是有效的 .xlsx，请重新下载模板或重新导出")
+  return false
+}
 
 const handleUploadRequest = async (options: UploadRequestOptions) => {
   selectedFile.value = options.file

@@ -155,7 +155,7 @@ export function useDataIO() {
     }
   }
 
-  const executeImportData = async (fileKey: string, modelUid: string, confirmEmpty = false): Promise<ImportRes> => {
+  const executeImportData = async (fileKey: string, modelUid: string): Promise<ImportRes> => {
     try {
       importing.value = true
       ElMessage.info("正在执行导入,请稍候...")
@@ -163,15 +163,12 @@ export function useDataIO() {
       // 调用导入接口
       const req: ImportReq = {
         model_uid: modelUid,
-        file_key: fileKey,
-        confirm_empty: confirmEmpty
+        file_key: fileKey
       }
 
       const { data } = await importDataApi(req)
 
-      ElMessage.success(
-        `导入完成：新增 ${data.created_count} 条，更新 ${data.updated_count} 条，删除 ${data.deleted_count} 条`
-      )
+      ElMessage.success(`导入完成：新增 ${data.created_count} 条，更新 ${data.updated_count} 条`)
       return data
     } catch (error) {
       console.error("导入数据失败:", error)

@@ -27,7 +27,7 @@ export function importDataApi(data: DataIO.ImportReq) {
 
 /**
  * 预览导入差异
- * NOTE: 只计算新增、更新、删除和不变数据，不写入数据库
+ * NOTE: 只计算新增、更新和不变数据，不写入数据库
  */
 export function previewImportDataApi(data: DataIO.ImportPreviewReq) {
   return instance.post<DataIO.ImportPreviewRes>({

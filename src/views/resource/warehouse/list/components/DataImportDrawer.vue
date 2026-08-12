@@ -8,10 +8,10 @@
     :header-icon="Upload"
     :show-footer="true"
     cancel-button-text="取消"
-    :confirm-button-text="preview?.is_empty ? '确认清空模型' : '确认导入'"
-    :confirm-button-type="preview?.is_empty ? 'danger' : 'primary'"
+    confirm-button-text="确认导入"
+    confirm-button-type="primary"
     :confirm-loading="importing"
-    :confirm-disabled="!preview || uploading || previewing"
+    :confirm-disabled="!preview || preview.is_empty || uploading || previewing"
     @cancel="handleClose"
     @confirm="handleImport"
     @closed="handleClose"
@@ -73,9 +73,9 @@
       </div>
 
       <template v-if="preview">
-        <el-alert v-if="preview.is_empty" title="表格数据为空" type="error" :closable="false" show-icon>
+        <el-alert v-if="preview.is_empty" title="表格数据为空" type="warning" :closable="false" show-icon>
           <template #default>
-            继续导入将删除“{{ modelName || modelUid }}”当前全部 {{ preview.current_count }} 条模型数据。
+            未执行导入，“{{ modelName || modelUid }}”当前 {{ preview.current_count }} 条模型数据保持不变。
           </template>
         </el-alert>
 
@@ -89,9 +89,6 @@
           <div class="summary-card update">
             <span>修改</span><strong>{{ preview.updated_count }}</strong>
           </div>
-          <div class="summary-card delete">
-            <span>删除</span><strong>{{ preview.deleted_count }}</strong>
-          </div>
           <div class="summary-card unchanged">
             <span>不变</span><strong>{{ preview.unchanged_count }}</strong>
           </div>
@@ -101,13 +98,12 @@
           <div class="diff-header">
             <div>
               <h3>数据对比</h3>
-              <p>以“{{ preview.unique_field }}”作为唯一索引；表格未包含的字段不会被覆盖。</p>
+              <p>以“{{ preview.unique_field }}”作为唯一索引；仅新增和更新，不删除模型现有数据。</p>
             </div>
             <el-radio-group v-model="actionFilter" size="small">
               <el-radio-button label="all">全部</el-radio-button>
               <el-radio-button label="create">新增</el-radio-button>
               <el-radio-button label="update">修改</el-radio-button>
-              <el-radio-button label="delete">删除</el-radio-button>
               <el-radio-button label="unchanged">不变</el-radio-button>
             </el-radio-group>
           </div>
@@ -144,8 +140,8 @@
           <strong>导入规则</strong>
           <ul>
             <li>字段标准与导出文件一致，唯一索引相同的数据执行更新，不存在的数据执行新增。</li>
-            <li>表格未包含的模型字段保持原值；模型中多出的数据会列为删除项，确认后以表格为准同步。</li>
-            <li>空表不会直接执行，必须再次确认后才会清空当前模型。</li>
+            <li>表格未包含的模型字段保持原值；模型中已有但表格未包含的数据保持不变。</li>
+            <li>表格数据为空时只提示，不执行新增、更新或删除操作。</li>
           </ul>
         </div>
       </div>
@@ -156,13 +152,7 @@
 <script lang="ts" setup>
 import { computed, ref } from "vue"
 import { Delete, Document, Download, InfoFilled, Loading, Right, Upload } from "@element-plus/icons-vue"
-import {
-  ElMessage,
-  ElMessageBox,
-  type UploadInstance,
-  type UploadRawFile,
-  type UploadRequestOptions
-} from "element-plus"
+import { ElMessage, type UploadInstance, type UploadRawFile, type UploadRequestOptions } from "element-plus"
 import { Drawer } from "@@/components/Dialogs"
 import { useDataIO } from "@/common/composables/useDataIO"
 import type { ImportChangeAction, ImportPreviewRes } from "@/api/resource/dataio/types"
@@ -214,10 +204,9 @@ const filteredRows = computed(() => {
   return preview.value.rows.filter((row) => row.action === actionFilter.value)
 })
 
-const actionTag: Record<ImportChangeAction, { label: string; type: "success" | "warning" | "danger" | "info" }> = {
+const actionTag: Record<ImportChangeAction, { label: string; type: "success" | "warning" | "info" }> = {
   create: { label: "新增", type: "success" },
   update: { label: "修改", type: "warning" },
-  delete: { label: "删除", type: "danger" },
   unchanged: { label: "不变", type: "info" }
 }
 const getActionTag = (action: ImportChangeAction) => actionTag[action] || actionTag.unchanged
@@ -249,7 +238,11 @@ const handleUploadRequest = async (options: UploadRequestOptions) => {
   try {
     uploadedFileKey.value = await uploadFileToS3(options.file)
     preview.value = await previewImportData(uploadedFileKey.value, props.modelUid)
-    ElMessage.success("数据差异已生成，请核对后确认导入")
+    if (preview.value.is_empty) {
+      ElMessage.warning("表格数据为空，未执行导入")
+    } else {
+      ElMessage.success("数据差异已生成，请核对后确认导入")
+    }
   } catch (error) {
     console.error("生成导入差异失败:", error)
     handleRemoveFile()
@@ -281,22 +274,13 @@ const handleImport = async () => {
     return
   }
 
-  let confirmEmpty = false
   if (preview.value.is_empty) {
-    try {
-      await ElMessageBox.confirm(
-        `表格数据为空，继续导入将删除“${props.modelName || props.modelUid}”全部 ${preview.value.current_count} 条数据，是否确认？`,
-        "确认清空模型数据",
-        { type: "error", confirmButtonText: "确认全部删除", cancelButtonText: "取消" }
-      )
-      confirmEmpty = true
-    } catch {
-      return
-    }
+    ElMessage.warning("表格数据为空，未执行导入")
+    return
   }
 
   try {
-    const result = await executeImportData(uploadedFileKey.value, props.modelUid, confirmEmpty)
+    const result = await executeImportData(uploadedFileKey.value, props.modelUid)
     emits("import-success", result.imported_count)
     handleClose()
   } catch (error) {
@@ -445,7 +429,7 @@ const handleClose = () => {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
   gap: 12px;
 }
 
@@ -472,9 +456,6 @@ const handleClose = () => {
   }
   &.update {
     border-left-color: #f59e0b;
-  }
-  &.delete {
-    border-left-color: #ef4444;
   }
   &.unchanged {
     border-left-color: #94a3b8;

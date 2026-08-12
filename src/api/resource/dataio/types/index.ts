@@ -4,8 +4,6 @@ export interface ImportReq {
   model_uid: string
   /** S3 文件键 */
   file_key: string
-  /** 空表导入时是否确认清空当前模型 */
-  confirm_empty?: boolean
 }
 
 /** 导入数据响应 */
@@ -14,7 +12,6 @@ export interface ImportRes {
   imported_count: number
   created_count: number
   updated_count: number
-  deleted_count: number
   unchanged_count: number
 }
 
@@ -23,7 +20,7 @@ export interface ImportPreviewReq {
   file_key: string
 }
 
-export type ImportChangeAction = "create" | "update" | "delete" | "unchanged"
+export type ImportChangeAction = "create" | "update" | "unchanged"
 
 export interface ImportPreviewRow {
   unique_id: string
@@ -40,7 +37,6 @@ export interface ImportPreviewRes {
   current_count: number
   created_count: number
   updated_count: number
-  deleted_count: number
   unchanged_count: number
   is_empty: boolean
   columns: string[]

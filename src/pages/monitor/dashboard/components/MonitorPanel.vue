@@ -94,7 +94,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { Document } from "@element-plus/icons-vue"
 import * as echarts from "echarts"
 import dayjs from "dayjs"
-import type { Metric } from "@/api/alert/proxy/types"
+import type { Metric } from "@/api/monitor/prometheus/types"
 import type { MonitorPanelConfig, MonitorPanelState, MonitorThreshold } from "../types"
 
 const props = defineProps<{

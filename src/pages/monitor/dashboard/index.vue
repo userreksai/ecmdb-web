@@ -15,13 +15,17 @@
       <div class="toolbar-controls">
         <el-select v-model="datasourceId" class="datasource-select" placeholder="选择 Prometheus 数据源">
           <el-option
-            v-for="datasource in datasources"
+            v-for="datasource in enabledDatasources"
             :key="datasource.id"
             :label="datasource.name"
             :value="datasource.id"
-            :disabled="!datasource.enabled"
           />
         </el-select>
+
+        <el-button @click="router.push('/monitor/datasource')">
+          <el-icon><Setting /></el-icon>
+          数据源配置
+        </el-button>
 
         <el-select v-model="rangeSeconds" class="range-select" aria-label="时间范围">
           <el-option v-for="option in rangeOptions" :key="option.value" :label="option.label" :value="option.value" />
@@ -42,9 +46,9 @@
     </header>
 
     <el-alert
-      v-if="!datasourceLoading && !datasources.length"
+      v-if="!enabledDatasources.length"
       title="没有可用的 Prometheus 数据源"
-      description="请先在数据源配置中添加并启用 PROMETHEUS 类型的数据源。"
+      description="请进入数据源配置，添加并启用 Prometheus 数据源。"
       type="warning"
       show-icon
       :closable="false"
@@ -146,6 +150,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
+import { useRouter } from "vue-router"
 import {
   Close,
   CopyDocument,
@@ -155,20 +160,20 @@ import {
   Monitor,
   PieChart,
   Refresh,
+  Setting,
   Warning
 } from "@element-plus/icons-vue"
 import { ElMessage } from "element-plus"
-import { QueryRangeApi } from "@/api/alert/proxy"
-import { listDatasourceApi } from "@/api/alert/datasource"
-import { DatasourceTypeEnum, type Datasource } from "@/api/alert/datasource/types/datasource"
+import { queryPrometheusRange } from "@/api/monitor/prometheus"
 import dashboardConfigJson from "./dashboard.config.json"
 import MonitorPanel from "./components/MonitorPanel.vue"
+import { useMonitorDatasources } from "../composables/useMonitorDatasources"
 import type { MonitorDashboardConfig, MonitorPanelConfig, MonitorPanelState } from "./types"
 
 const dashboardConfig = dashboardConfigJson as MonitorDashboardConfig
-const datasourceId = ref<number>()
-const datasources = ref<Datasource[]>([])
-const datasourceLoading = ref(false)
+const router = useRouter()
+const { datasources, reload: reloadDatasources } = useMonitorDatasources()
+const datasourceId = ref<string>()
 const rangeSeconds = ref(dashboardConfig.defaultRangeSeconds)
 const refreshSeconds = ref(dashboardConfig.defaultRefreshSeconds)
 const refreshing = ref(false)
@@ -205,7 +210,8 @@ const panelStates = reactive<Record<string, MonitorPanelState>>(
   )
 )
 
-const selectedDatasource = computed(() => datasources.value.find((item) => item.id === datasourceId.value))
+const enabledDatasources = computed(() => datasources.value.filter((item) => item.enabled))
+const selectedDatasource = computed(() => enabledDatasources.value.find((item) => item.id === datasourceId.value))
 
 const latestValues = (panelId: string) =>
   panelStates[panelId].metrics
@@ -239,27 +245,6 @@ const summary = computed(() => {
 let refreshTimer: number | undefined
 let requestGeneration = 0
 
-const fetchDatasources = async () => {
-  datasourceLoading.value = true
-  try {
-    const response = await listDatasourceApi({
-      offset: 0,
-      limit: 100,
-      type: DatasourceTypeEnum.PROMETHEUS,
-      enabled: true
-    })
-    datasources.value = (response.data.data_sources || []).filter(
-      (datasource) => datasource.type === DatasourceTypeEnum.PROMETHEUS && datasource.enabled
-    )
-    datasourceId.value = datasources.value[0]?.id
-  } catch (error) {
-    console.error("Failed to load Prometheus datasources", error)
-    datasources.value = []
-  } finally {
-    datasourceLoading.value = false
-  }
-}
-
 const queryPanel = async (panel: MonitorPanelConfig, generation: number) => {
   const state = panelStates[panel.id]
   state.loading = true
@@ -269,16 +254,18 @@ const queryPanel = async (panel: MonitorPanelConfig, generation: number) => {
     const end = Math.floor(Date.now() / 1000)
     const start = end - rangeSeconds.value
     const step = Math.max(1, Math.floor(rangeSeconds.value / 400))
-    const response = await QueryRangeApi({
-      datasource_id: datasourceId.value!,
+    const datasource = selectedDatasource.value
+    if (!datasource) throw new Error("请选择可用的 Prometheus 数据源")
+
+    const metrics = await queryPrometheusRange(datasource, {
       query: panel.promql,
-      start_time: start,
-      end_time: end,
+      start,
+      end,
       step
     })
 
     if (generation !== requestGeneration) return
-    state.metrics = response.data.metrics || []
+    state.metrics = metrics
     state.updatedAt = Date.now()
   } catch (error) {
     if (generation !== requestGeneration) return
@@ -335,10 +322,11 @@ watch(datasourceId, () => refreshAll())
 watch(rangeSeconds, () => refreshAll())
 watch(refreshSeconds, resetRefreshTimer)
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener("fullscreenchange", handleFullscreenChange)
+  reloadDatasources()
+  datasourceId.value = enabledDatasources.value[0]?.id
   resetRefreshTimer()
-  await fetchDatasources()
 })
 
 onBeforeUnmount(() => {

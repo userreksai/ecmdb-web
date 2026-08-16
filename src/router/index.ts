@@ -96,6 +96,28 @@ export const constantRoutes: RouteRecordRaw[] = [
       platforms: ["change"],
       hidden: true
     }
+  },
+  {
+    path: "/monitor",
+    component: Layouts,
+    redirect: "/monitor/dashboard",
+    meta: {
+      title: "监控数据图",
+      svgIcon: "time_series",
+      platforms: ["alert"]
+    },
+    children: [
+      {
+        path: "/monitor/dashboard",
+        component: () => import("@/pages/monitor/dashboard/index.vue"),
+        name: "MonitorDashboard",
+        meta: {
+          title: "监控数据图",
+          svgIcon: "time_series",
+          platforms: ["alert"]
+        }
+      }
+    ]
   }
   // ...alertRoutes
   // ...taskRoutes

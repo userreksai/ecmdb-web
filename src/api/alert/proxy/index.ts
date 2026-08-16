@@ -6,6 +6,7 @@ import type { RetrieveResult, QueryRange } from "./types/index"
 export function QueryRangeApi(params: QueryRange) {
   return instance.post<RetrieveResult>({
     url: `${API_SERVICE.ALERT}/proxy/query_range`,
-    data: params
+    data: params,
+    timeout: 30000
   })
 }

@@ -1,0 +1,71 @@
+{
+  "title": "监控数据图",
+  "defaultRangeSeconds": 3600,
+  "defaultRefreshSeconds": 30,
+  "panels": [
+    {
+      "id": "cpu-usage",
+      "title": "CPU 使用率",
+      "description": "按实例展示最近时间范围内的 CPU 使用趋势",
+      "type": "timeseries",
+      "promql": "100 - avg by (instance) (rate(node_cpu_seconds_total{job=\"linux-node\",mode=\"idle\"}[5m])) * 100",
+      "unit": "percent",
+      "decimals": 1,
+      "span": 16,
+      "legend": "{{instance}}",
+      "thresholds": [
+        { "value": 0, "color": "#67c23a", "label": "正常" },
+        { "value": 70, "color": "#e6a23c", "label": "关注" },
+        { "value": 85, "color": "#f56c6c", "label": "高负载" }
+      ]
+    },
+    {
+      "id": "memory-usage",
+      "title": "内存使用率",
+      "description": "各实例当前内存使用情况",
+      "type": "gauge",
+      "promql": "(1 - node_memory_MemAvailable_bytes{job=\"linux-node\"} / node_memory_MemTotal_bytes{job=\"linux-node\"}) * 100",
+      "unit": "percent",
+      "decimals": 1,
+      "span": 8,
+      "legend": "{{instance}}",
+      "thresholds": [
+        { "value": 0, "color": "#67c23a", "label": "正常" },
+        { "value": 70, "color": "#e6a23c", "label": "关注" },
+        { "value": 85, "color": "#f56c6c", "label": "高负载" }
+      ]
+    },
+    {
+      "id": "filesystem-usage",
+      "title": "文件系统使用率",
+      "description": "按实例和挂载点展示文件系统占用情况",
+      "type": "table",
+      "promql": "(1 - node_filesystem_avail_bytes{job=\"linux-node\",fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes{job=\"linux-node\",fstype!~\"tmpfs|overlay\"}) * 100",
+      "unit": "percent",
+      "decimals": 1,
+      "span": 16,
+      "legend": "{{instance}} · {{mountpoint}}",
+      "thresholds": [
+        { "value": 0, "color": "#67c23a", "label": "正常" },
+        { "value": 70, "color": "#e6a23c", "label": "关注" },
+        { "value": 85, "color": "#f56c6c", "label": "空间不足" }
+      ]
+    },
+    {
+      "id": "process-status",
+      "title": "进程状态",
+      "description": "自定义 Exporter 状态：0 正常，1 异常，无数据为未知",
+      "type": "status",
+      "promql": "custom_process_status{job=\"linux-node\",mode=\"jincheng\"}",
+      "unit": "number",
+      "decimals": 0,
+      "span": 8,
+      "legend": "{{instance}} · {{mode}}",
+      "thresholds": [],
+      "valueMappings": [
+        { "value": 0, "label": "正常", "status": "normal" },
+        { "value": 1, "label": "异常", "status": "abnormal" }
+      ]
+    }
+  ]
+}

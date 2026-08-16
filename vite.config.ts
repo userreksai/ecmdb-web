@@ -168,6 +168,11 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/task/, "/api")
         },
+        "/prometheus": {
+          target: `http://${viteEnv.VITE_PROMETHEUS_API || "127.0.0.1:9090"}`,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/prometheus/, "")
+        },
         "/minio": {
           target: `http://${viteEnv.VITE_MINIO_ENDPOINT}`,
           changeOrigin: true,

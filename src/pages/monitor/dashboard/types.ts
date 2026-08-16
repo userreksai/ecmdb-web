@@ -1,4 +1,4 @@
-import type { Metric } from "@/api/alert/proxy/types"
+import type { Metric } from "@/api/monitor/prometheus/types"
 
 export type MonitorPanelType = "timeseries" | "gauge" | "table" | "status"
 

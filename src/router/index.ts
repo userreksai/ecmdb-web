@@ -102,9 +102,10 @@ export const constantRoutes: RouteRecordRaw[] = [
     component: Layouts,
     redirect: "/monitor/dashboard",
     meta: {
-      title: "监控数据图",
+      title: "监控中心",
       svgIcon: "time_series",
-      platforms: ["alert"]
+      platforms: ["alert"],
+      alwaysShow: true
     },
     children: [
       {
@@ -114,6 +115,16 @@ export const constantRoutes: RouteRecordRaw[] = [
         meta: {
           title: "监控数据图",
           svgIcon: "time_series",
+          platforms: ["alert"]
+        }
+      },
+      {
+        path: "/monitor/datasource",
+        component: () => import("@/pages/monitor/datasource/index.vue"),
+        name: "MonitorDatasource",
+        meta: {
+          title: "数据源配置",
+          svgIcon: "datasource",
           platforms: ["alert"]
         }
       }

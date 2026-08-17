@@ -9,7 +9,7 @@
             {{ selectedDatasource?.enabled ? "数据源已启用" : "未选择" }}
           </el-tag>
         </div>
-        <p>直接读取 Prometheus 时序数据；机器与标签从 up 指标实时发现。</p>
+        <p>直接读取 Prometheus 时序数据；机器与标签从当前活动采集目标实时发现。</p>
       </div>
 
       <div class="toolbar-controls">
@@ -313,7 +313,7 @@ import {
   Warning
 } from "@element-plus/icons-vue"
 import { ElMessage, ElMessageBox } from "element-plus"
-import { queryPrometheusInstant, queryPrometheusRange } from "@/api/monitor/prometheus"
+import { queryPrometheusActiveTargets, queryPrometheusInstant, queryPrometheusRange } from "@/api/monitor/prometheus"
 import dashboardConfigJson from "./dashboard.config.json"
 import MonitorPanel from "./components/MonitorPanel.vue"
 import { useMonitorDatasources } from "../composables/useMonitorDatasources"
@@ -516,16 +516,16 @@ const loadTargets = async () => {
   targetLoading.value = true
   targetError.value = ""
   try {
-    const metrics = await queryPrometheusInstant(datasource, "up")
+    const activeTargets = await queryPrometheusActiveTargets(datasource)
     if (generation !== targetGeneration) return
-    targets.value = metrics
-      .map((metric) => ({
-        instance: metric.labels.instance || "",
-        job: metric.labels.job || "",
-        labels: metric.labels,
-        up: metric.points.at(-1)?.value === 1
+    targets.value = activeTargets
+      .map((target) => ({
+        instance: target.labels.instance || target.discoveredLabels.__address__ || "",
+        job: target.labels.job || target.scrapePool || "",
+        labels: target.labels,
+        up: target.health === "up"
       }))
-      .filter((target) => target.instance && target.job)
+      .filter((target) => target.instance && target.job && target.job.toLowerCase() !== "prometheus")
     sanitizeFilters()
   } catch (error) {
     if (generation !== targetGeneration) return

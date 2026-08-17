@@ -44,6 +44,31 @@ export interface PrometheusResponse<T> {
   warnings?: string[]
 }
 
+export interface PrometheusActiveTarget {
+  discoveredLabels: Record<string, string>
+  labels: Record<string, string>
+  scrapePool: string
+  scrapeUrl: string
+  globalUrl: string
+  lastError: string
+  lastScrape: string
+  lastScrapeDuration: number
+  health: "up" | "down" | "unknown"
+  scrapeInterval: string
+  scrapeTimeout: string
+}
+
+export interface PrometheusTargetsResponse {
+  status: "success" | "error"
+  data?: {
+    activeTargets: PrometheusActiveTarget[]
+    droppedTargets: PrometheusActiveTarget[]
+  }
+  errorType?: string
+  error?: string
+  warnings?: string[]
+}
+
 export interface DatasourceTestResult {
   success: boolean
   message: string

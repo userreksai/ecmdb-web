@@ -52,6 +52,29 @@ export async function queryPrometheusRange(datasource: MonitorDatasource, params
   }
 }
 
+export async function queryPrometheusInstant(
+  datasource: MonitorDatasource,
+  query: string,
+  time?: number
+): Promise<Metric[]> {
+  try {
+    const response = await axios.get<PrometheusResponse<PrometheusVectorItem[]>>(
+      `${normalizeBaseUrl(datasource.url)}/api/v1/query`,
+      {
+        params: { query, time },
+        timeout: 30000
+      }
+    )
+
+    return ensureSuccess(response.data).map((item) => ({
+      labels: item.metric,
+      points: [{ timestamp: item.value[0], value: Number(item.value[1]) }]
+    }))
+  } catch (error) {
+    throw new Error(prometheusError(error))
+  }
+}
+
 export async function testPrometheusDatasource(datasource: MonitorDatasource): Promise<DatasourceTestResult> {
   try {
     const response = await axios.get<PrometheusResponse<PrometheusVectorItem[]>>(

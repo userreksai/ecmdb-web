@@ -53,6 +53,13 @@
 
       <div v-else-if="panel.type === 'table'" class="table-wrapper">
         <el-table :data="tableRows" height="286" stripe>
+          <el-table-column
+            v-if="groupByLabel && groupByLabel !== 'instance'"
+            prop="group"
+            :label="groupByLabel"
+            min-width="120"
+            show-overflow-tooltip
+          />
           <el-table-column prop="instance" label="实例" min-width="150" show-overflow-tooltip />
           <el-table-column prop="mountpoint" label="挂载点" min-width="140" show-overflow-tooltip />
           <el-table-column prop="device" label="设备" min-width="140" show-overflow-tooltip />
@@ -100,6 +107,7 @@ import type { MonitorPanelConfig, MonitorPanelState, MonitorThreshold } from "..
 const props = defineProps<{
   panel: MonitorPanelConfig
   state: MonitorPanelState
+  groupByLabel?: string
 }>()
 
 defineEmits<{
@@ -114,7 +122,11 @@ const latestPoint = (metric: Metric) => metric.points.at(-1)
 
 const renderLegend = (labels: Record<string, string>) => {
   const rendered = props.panel.legend.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, (_, key: string) => labels[key] || "-")
-  return rendered.replace(/(?:\s*[·/]\s*-)+$/g, "") || labels.instance || "未命名实例"
+  const legend = rendered.replace(/(?:\s*[·/]\s*-)+$/g, "") || labels.instance || "未命名实例"
+  const groupLabel = props.groupByLabel
+  if (!groupLabel || groupLabel === "instance" || !labels[groupLabel]) return legend
+  if (props.panel.legend.includes(`{{${groupLabel}}}`)) return legend
+  return `${labels[groupLabel]} / ${legend}`
 }
 
 const latestRows = computed(() =>
@@ -137,6 +149,7 @@ const latestRows = computed(() =>
 const tableRows = computed(() =>
   latestRows.value.map((row) => ({
     ...row,
+    group: props.groupByLabel ? row.labels[props.groupByLabel] || "-" : "-",
     instance: row.labels.instance || "-",
     mountpoint: row.labels.mountpoint || "-",
     device: row.labels.device || "-"

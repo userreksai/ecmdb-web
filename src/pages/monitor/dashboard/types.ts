@@ -41,3 +41,18 @@ export interface MonitorPanelState {
   metrics: Metric[]
   updatedAt: number | null
 }
+
+export interface MonitorTarget {
+  instance: string
+  job: string
+  labels: Record<string, string>
+  up: boolean
+}
+
+export interface MonitorFilterState {
+  job: string
+  labelName: string
+  labelValues: string[]
+  instances: string[]
+  groupByLabel: string
+}

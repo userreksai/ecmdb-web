@@ -90,8 +90,8 @@ const listOrdersData = async () => {
       user_id: ""
     })
 
-    paginationData.total = data.total
-    ordersData.value = data.orders
+    paginationData.total = Number(data?.total ?? 0)
+    ordersData.value = Array.isArray(data?.orders) ? data.orders : []
 
     // 根据模版ID获取模版名称
     const templateIds = ordersData.value.map((item) => item.template_id)
@@ -99,6 +99,7 @@ const listOrdersData = async () => {
       templateToolsStore.setByTemplateIds(templateIds)
     }
   } catch (error) {
+    console.error("查询我的待办失败:", error)
     ordersData.value = []
   } finally {
     loading.value = false

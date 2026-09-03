@@ -92,8 +92,8 @@ const startByOrdersData = async () => {
       process_name: ""
     })
 
-    paginationData.total = data.total
-    ordersData.value = data.orders
+    paginationData.total = Number(data?.total ?? 0)
+    ordersData.value = Array.isArray(data?.orders) ? data.orders : []
 
     // 需要合并的字段名，按照合并登记来排序
     const colFields = ["id", "template_name", "withdraw", "current_step", "proc_inst_create_time", "active"]
@@ -106,6 +106,7 @@ const startByOrdersData = async () => {
       templateToolsStore.setByTemplateIds(templateIds)
     }
   } catch (error) {
+    console.error("查询我的工单失败:", error)
     ordersData.value = []
   } finally {
     loading.value = false

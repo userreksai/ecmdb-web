@@ -341,6 +341,57 @@ const formRules: FormRules = {
       },
       trigger: "blur"
     }
+  ],
+  codebook_uid: [{ required: true, message: "请选择代码模版", trigger: "change" }],
+  tag: [{ required: true, message: "请选择执行标签", trigger: "change" }],
+  exec_method: [
+    {
+      validator: (_rule, value, callback) => {
+        if (propertyForm.is_timing && !value) callback(new Error("请选择定时配置方式"))
+        else callback()
+      },
+      trigger: "change"
+    }
+  ],
+  unit: [
+    {
+      validator: (_rule, value, callback) => {
+        if (propertyForm.is_timing && propertyForm.exec_method === "hand" && ![1, 2, 3].includes(Number(value))) {
+          callback(new Error("请选择时间单位"))
+        } else callback()
+      },
+      trigger: "change"
+    }
+  ],
+  quantity: [
+    {
+      validator: (_rule, value, callback) => {
+        if (propertyForm.is_timing && propertyForm.exec_method === "hand" && Number(value) <= 0) {
+          callback(new Error("触发间隔必须大于 0"))
+        } else callback()
+      },
+      trigger: "change"
+    }
+  ],
+  template_id: [
+    {
+      validator: (_rule, value, callback) => {
+        if (propertyForm.is_timing && propertyForm.exec_method === "template" && Number(value) <= 0) {
+          callback(new Error("请选择提取模版"))
+        } else callback()
+      },
+      trigger: "change"
+    }
+  ],
+  template_field: [
+    {
+      validator: (_rule, value, callback) => {
+        if (propertyForm.is_timing && propertyForm.exec_method === "template" && !String(value || "").trim()) {
+          callback(new Error("请选择指定字段"))
+        } else callback()
+      },
+      trigger: "change"
+    }
   ]
 }
 

@@ -110,6 +110,7 @@ import ManagerHeader from "@/common/components/ManagerHeader/index.vue"
 import DataTable from "@/common/components/DataTable/index.vue"
 import PageContainer from "@/common/components/PageContainer/index.vue"
 import { refreshGraphId } from "@/common/utils/logicflow"
+import { validateWorkflowGraph } from "@/common/utils/workflowValidation"
 
 const { paginationData, handleCurrentChange, handleSizeChange } = usePagination()
 const previewRef = ref<InstanceType<typeof Preview>>()
@@ -393,23 +394,45 @@ const handleDelete = (row: workflow) => {
   })
 }
 
-const deployWorkflow = (row: workflow) => {
-  ElMessageBox({
-    title: "部署确认",
-    message: h("p", null, [
-      h("span", null, "正在部署名称: "),
-      h("i", { style: "color: red" }, `${row.name}`),
-      h("span", null, " 确认部署？")
-    ]),
-    confirmButtonText: "确定",
-    cancelButtonText: "取消",
-    type: "warning"
-  }).then(() => {
-    deployWorkflowApi(row.id).then(() => {
-      ElMessage.success("部署成功")
-      listFlowsData()
+const deployWorkflow = async (row: workflow) => {
+  try {
+    await ElMessageBox({
+      title: "部署确认",
+      message: h("p", null, [
+        h("span", null, "正在部署名称: "),
+        h("i", { style: "color: red" }, `${row.name}`),
+        h("span", null, " 确认部署？")
+      ]),
+      confirmButtonText: "确定",
+      cancelButtonText: "取消",
+      type: "warning"
     })
-  })
+
+    const { data: detail } = await getWorkflowDetailApi(row.id)
+    const problems = validateWorkflowGraph(detail.flow_data)
+    if (problems.length > 0) {
+      await ElMessageBox({
+        title: "流程校验未通过",
+        message: h(
+          "div",
+          { style: "white-space: pre-line; line-height: 1.7" },
+          problems
+            .slice(0, 12)
+            .map((problem, index) => `${index + 1}. ${problem}`)
+            .join("\n") + (problems.length > 12 ? `\n……另有 ${problems.length - 12} 项问题` : "")
+        ),
+        confirmButtonText: "我知道了",
+        type: "error"
+      })
+      return
+    }
+
+    await deployWorkflowApi(row.id)
+    ElMessage.success("部署成功")
+    listFlowsData()
+  } catch (error) {
+    if (error !== "cancel" && error !== "close") console.error("部署流程失败:", error)
+  }
 }
 
 const operateBtnStatus = ref([

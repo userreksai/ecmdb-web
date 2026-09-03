@@ -3,8 +3,10 @@ import type {
   DatasourceTestResult,
   Metric,
   MonitorDatasource,
+  PrometheusActiveTarget,
   PrometheusMatrixItem,
   PrometheusResponse,
+  PrometheusTargetsResponse,
   PrometheusVectorItem,
   QueryRangeParams
 } from "./types"
@@ -70,6 +72,22 @@ export async function queryPrometheusInstant(
       labels: item.metric,
       points: [{ timestamp: item.value[0], value: Number(item.value[1]) }]
     }))
+  } catch (error) {
+    throw new Error(prometheusError(error))
+  }
+}
+
+export async function queryPrometheusActiveTargets(datasource: MonitorDatasource): Promise<PrometheusActiveTarget[]> {
+  try {
+    const response = await axios.get<PrometheusTargetsResponse>(`${normalizeBaseUrl(datasource.url)}/api/v1/targets`, {
+      params: { state: "active" },
+      timeout: 30000
+    })
+
+    if (response.data.status !== "success" || !response.data.data) {
+      throw new Error(response.data.error || "Prometheus 返回了无效的活动目标响应")
+    }
+    return response.data.data.activeTargets
   } catch (error) {
     throw new Error(prometheusError(error))
   }

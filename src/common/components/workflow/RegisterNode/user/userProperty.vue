@@ -110,7 +110,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from "vue"
-import { FormInstance, FormRules } from "element-plus"
+import { ElMessage, FormInstance, FormRules } from "element-plus"
 import { UserFilled, QuestionFilled, Document, Timer, Collection, Setting, Close } from "@element-plus/icons-vue"
 
 // 组件与 Composable
@@ -260,6 +260,10 @@ const getPreviewText = (a: Assignee) => {
 
 // ── 节点属性持久化 ──────────────────────────────────────────────────────
 const confirmFunc = () => {
+  if (propertyForm.assignees.length === 0) {
+    ElMessage.warning("请至少配置一条审批人策略")
+    return
+  }
   formRef.value?.validate((valid) => {
     if (valid) {
       props.lf?.setProperties(props.nodeData?.id, { ...propertyForm })

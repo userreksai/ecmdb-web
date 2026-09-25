@@ -1,4 +1,4 @@
-import axios from "axios"
+import axios, { AxiosError } from "axios"
 import type { AxiosInstance } from "axios"
 import type { HYRequesInterceptors, HYRequestConfig } from "./type"
 import { ElMessage } from "element-plus"
@@ -41,7 +41,14 @@ class HyRequest {
 
   // 构造器
   constructor(config: HYRequestConfig) {
-    this.instance = axios.create(config)
+    this.instance = axios.create({
+      ...config,
+      transitional: {
+        ...config.transitional,
+        // 使用 ETIMEDOUT 区分超时与浏览器中断请求（ECONNABORTED）。
+        clarifyTimeoutError: true
+      }
+    })
     this.interceptors = config.interceptors
 
     // 当前实例的请求拦截
@@ -93,10 +100,25 @@ class HyRequest {
         }
       },
       (error) => {
-        // 处理网络错误（如网络断开、服务器不可达等）
+        // 主动取消请求时保留异常，不弹出网络错误提示。
+        if (axios.isCancel(error)) {
+          return Promise.reject(error)
+        }
+
         if (!error.response) {
-          // 网络错误时不立即登出，只显示错误信息
-          ElMessage.error("网络连接失败，请检查网络设置")
+          switch (error.code) {
+            case AxiosError.ETIMEDOUT:
+              ElMessage.error(error.config?.timeoutErrorMessage || "请求超时，请稍后重试")
+              break
+            case AxiosError.ECONNABORTED:
+              ElMessage.error("请求已中断，请重试")
+              break
+            case AxiosError.ERR_NETWORK:
+              ElMessage.error("网络连接失败，请检查网络设置")
+              break
+            default:
+              ElMessage.error(error.message || "请求失败，请稍后重试")
+          }
           return Promise.reject(error)
         }
 

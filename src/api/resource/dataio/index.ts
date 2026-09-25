@@ -39,16 +39,15 @@ export function previewImportDataApi(data: DataIO.ImportPreviewReq) {
 
 /**
  * 导出数据
- * NOTE: 导出当前模型的所有资产数据为 Excel 文件
- */
-/**
- * 导出数据
  * NOTE: 导出当前模型的资产数据为 Excel 文件，支持筛选和范围选择
  */
 export function exportDataApi(data: DataIO.ExportReq) {
   return instance.post<Blob>({
     url: `${API_SERVICE.CMDB}/dataio/export`,
     data,
-    responseType: "blob"
+    responseType: "blob",
+    // 全量查询和 Excel 生成可能超过普通请求的 5 秒超时。
+    timeout: 120000,
+    timeoutErrorMessage: "导出超时，请缩小导出范围或稍后重试"
   })
 }
